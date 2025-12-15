@@ -5,18 +5,25 @@ import datetime
 import os
 import argparse
 
-# Ruta del archivo de salida (se generará en el directorio actual)
-OUTPUT_DIR = "."
+# Carpeta base para los informes
+BASE_DIR = "monitorizacion"
+
+def crear_ruta_salida(fecha_hoy):
+    """Crea la ruta: monitorizacion/YYYY-MM-DD/"""
+    ruta = os.path.join(BASE_DIR, fecha_hoy)
+    os.makedirs(ruta, exist_ok=True)
+    return ruta
 
 def obtener_servicios_sistema():
-    """Obtiene la lista de todos los servicios activos o inactivos gestionados por systemd."""
+    """Obtiene la lista de todos los servicios gestionados por systemd."""
     try:
-        result = subprocess.run(["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"],
-                                capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"],
+            capture_output=True, text=True, check=True
+        )
         servicios = []
         for line in result.stdout.strip().split('\n'):
             if line:
-                # El nombre del servicio está en la primera columna
                 nombre = line.split()[0]
                 if nombre.endswith('.service'):
                     servicios.append(nombre)
@@ -26,7 +33,6 @@ def obtener_servicios_sistema():
         return []
 
 def obtener_estado_servicio(nombre):
-    """Obtiene el estado actual de un servicio (active/inactive/failed)."""
     try:
         result = subprocess.run(["systemctl", "is-active", nombre], capture_output=True, text=True)
         return result.stdout.strip()
@@ -34,7 +40,6 @@ def obtener_estado_servicio(nombre):
         return "unknown"
 
 def obtener_log_servicio(nombre, num_lineas=5):
-    """Obtiene las últimas N líneas del log del servicio."""
     try:
         result = subprocess.run(
             ["journalctl", "-u", nombre, "-n", str(num_lineas), "--no-pager"],
@@ -47,16 +52,7 @@ def obtener_log_servicio(nombre, num_lineas=5):
     except Exception as e:
         return [f"(Error al leer log: {e})"]
 
-def guardar_resultado(datos):
-    """Guarda el informe en un archivo con marca de tiempo."""
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = os.path.join(OUTPUT_DIR, f"monitor_servicios_{timestamp}.log")
-    with open(filename, 'w', encoding='utf-8') as f:
-        f.write(datos)
-    print(f"\n✅ Informe guardado en: {filename}\n")
-
 def formatear_informe(servicios_info):
-    """Devuelve un string con el informe formateado."""
     output = []
     output.append("=" * 80)
     output.append("MONITORIZACIÓN DE SERVICIOS DEL SISTEMA")
@@ -75,8 +71,29 @@ def formatear_informe(servicios_info):
 
     return "\n".join(output)
 
+def guardar_resultado(servicios_info, nombres_monitoreados):
+    """Guarda el informe con nombre dinámico y en la carpeta por fecha."""
+    ahora = datetime.datetime.now()
+    fecha_hoy = ahora.strftime("%Y-%m-%d")
+    hora_actual = ahora.strftime("%H%M%S")
+
+    # Determinar nombre del archivo
+    if len(nombres_monitoreados) == 1:
+        nombre_servicio = nombres_monitoreados[0].replace(".service", "")
+        nombre_archivo = f"monitor_servicio_{nombre_servicio}_{ahora.strftime('%Y%m%d_%H%M%S')}.log"
+    else:
+        nombre_archivo = f"monitor_servicios_{ahora.strftime('%Y%m%d_%H%M%S')}.log"
+
+    ruta_salida = crear_ruta_salida(fecha_hoy)
+    ruta_completa = os.path.join(ruta_salida, nombre_archivo)
+
+    informe = formatear_informe(servicios_info)
+    with open(ruta_completa, 'w', encoding='utf-8') as f:
+        f.write(informe)
+
+    print(f"\n✅ Informe guardado en: {ruta_completa}\n")
+
 def gestionar_servicio(nombre, accion):
-    """Arranca o detiene un servicio."""
     if accion == "start":
         cmd = ["systemctl", "start", nombre]
     elif accion == "stop":
@@ -92,7 +109,7 @@ def gestionar_servicio(nombre, accion):
         print(f"❌ Error al {accion}ar el servicio '{nombre}': {e}")
         return False
 
-def monitorizar_servicios(nombres_servicios=None, auto_mode=False):
+def monitorizar_servicios(nombres_servicios=None):
     """Monitoriza uno o varios servicios y guarda el informe."""
     if nombres_servicios is None:
         todos = obtener_servicios_sistema()
@@ -107,9 +124,7 @@ def monitorizar_servicios(nombres_servicios=None, auto_mode=False):
         log = obtener_log_servicio(nombre)
         servicios_info.append((nombre, estado, log))
 
-    informe = formatear_informe(servicios_info)
-    print(informe)
-    guardar_resultado(informe)
+    guardar_resultado(servicios_info, nombres_servicios)
 
 def menu_interactivo():
     print("\n" + "="*50)
@@ -118,7 +133,7 @@ def menu_interactivo():
     while True:
         print("\nOpciones:")
         print("1. Arrancar un servicio")
-        print("∫2. Parar un servicio")
+        print("2. Parar un servicio")
         print("3. Monitorizar solo un servicio")
         print("4. Monitorizar todos los servicios")
         print("0. Salir")
@@ -126,14 +141,20 @@ def menu_interactivo():
 
         if opcion == "1":
             nombre = input("Nombre del servicio a arrancar: ").strip()
+            if nombre and not nombre.endswith('.service'):
+                nombre += '.service'
             if nombre:
                 gestionar_servicio(nombre, "start")
         elif opcion == "2":
             nombre = input("Nombre del servicio a detener: ").strip()
+            if nombre and not nombre.endswith('.service'):
+                nombre += '.service'
             if nombre:
                 gestionar_servicio(nombre, "stop")
         elif opcion == "3":
             nombre = input("Nombre del servicio a monitorizar: ").strip()
+            if nombre and not nombre.endswith('.service'):
+                nombre += '.service'
             if nombre:
                 monitorizar_servicios([nombre])
         elif opcion == "4":
