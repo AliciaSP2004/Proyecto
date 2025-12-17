@@ -1,278 +1,305 @@
 #!/usr/bin/env python3
 """
-Script para monitorear servicios del sistema en Linux (con systemd).
-Ofrece dos modos:
-  - Modo manual: menú interactivo para gestionar y monitorizar servicios.
-  - Modo automático: ideal para ejecutar con cron; monitoriza todos los servicios.
-
-Además:
-  - Genera un informe resumido legible por humanos.
-  - Guarda logs detallados de cada servicio en una subcarpeta 'logs'.
-  - Organiza todo en una estructura de carpetas por fecha.
+Monitor avanzado de servicios web (Apache/Nginx) con modo manual y automático.
+Cumple con todos los requisitos funcionales mínimos del proyecto.
 """
 
 import sys
-import subprocess          # Para ejecutar comandos del sistema (systemctl, journalctl)
-import datetime            # Para obtener fecha y hora actual
-import os                  # Para gestionar rutas y crear directorios
-import argparse            # Para manejar argumentos de línea de comandos (--auto)
+import subprocess
+import datetime
+import os
+import socket
+import requests
+import psutil
+import shutil
+import json
+import argparse
+import platform
 
 # ==============================================================================
-# CONFIGURACIÓN GLOBAL
+# CONFIGURACIÓN
 # ==============================================================================
 
-# Carpeta base donde se guardarán todos los informes y logs
+# Carpeta base de salida
 BASE_DIR = "monitorizacion"
 
-# Número de líneas del log que se guardarán en los archivos detallados (logs/)
-LOG_LINES = 100  # Puedes ajustar este valor si necesitas más o menos contexto
+# Servicios web a monitorizar (ajustable)
+SERVICIOS_WEB = ["apache2.service", "nginx.service"]
+
+# Umbrales para alertas (ajustables)
+UMBRALES = {
+    "cpu_percent": 85,      # >85% → WARN
+    "ram_percent": 90,      # >90% → WARN
+    "disk_percent": 95,     # >95% → CRIT
+    "http_timeout": 10,     # segundos
+    "http_max_time": 3.0,   # segundos
+}
+
+# Puerto predeterminado del servicio web
+PUERTO_WEB = 80
 
 # ==============================================================================
-# FUNCIONES DE GESTIÓN DE RUTAS Y CARPETAS
+# FUNCIONES DE CHECK (modulares y reutilizables)
+# ==============================================================================
+
+def check_estado_servicio(nombre):
+    """Verifica si el servicio está activo."""
+    try:
+        result = subprocess.run(["systemctl", "is-active", nombre], capture_output=True, text=True, timeout=10)
+        estado = result.stdout.strip()
+        activo = (estado == "active")
+        detalles = f"Estado: {estado}"
+        return activo, "OK", detalles
+    except Exception as e:
+        return False, "CRIT", f"Error al comprobar estado: {e}"
+
+def check_puerto_escuchando(puerto=80):
+    """Verifica si el puerto 80 está escuchando localmente."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(2)
+            result = s.connect_ex(("127.0.0.1", puerto))
+            escuchando = (result == 0)
+            detalles = f"Puerto {puerto} {'escuchando' if escuchando else 'NO escuchando'}"
+            estado = "OK" if escuchando else "CRIT"
+            return escuchando, estado, detalles
+    except Exception as e:
+        return False, "CRIT", f"Error al comprobar puerto: {e}"
+
+def check_respuesta_http(url="http://localhost", timeout=10, max_time=3.0):
+    """Hace una petición HTTP y devuelve código, tiempo y estado."""
+    try:
+        start = datetime.datetime.now()
+        response = requests.get(url, timeout=timeout)
+        tiempo = (datetime.datetime.now() - start).total_seconds()
+        codigo = response.status_code
+        detalles = f"HTTP {codigo}, tiempo: {tiempo:.2f}s"
+
+        if codigo == 200:
+            estado = "OK"
+        elif 400 <= codigo < 600:
+            estado = "CRIT"
+        else:
+            estado = "WARN"
+
+        if tiempo > max_time:
+            estado = "WARN" if estado == "OK" else estado
+
+        return True, estado, detalles, tiempo, codigo
+    except requests.exceptions.Timeout:
+        return False, "CRIT", "Timeout en petición HTTP", timeout, None
+    except Exception as e:
+        return False, "CRIT", f"Error HTTP: {e}", 0, None
+
+def check_recursos_sistema():
+    """Obtiene uso de CPU, RAM y disco."""
+    try:
+        cpu = psutil.cpu_percent(interval=1)
+        ram = psutil.virtual_memory().percent
+        disco = psutil.disk_usage('/').percent
+
+        checks = []
+        estado_global = "OK"
+
+        if cpu > UMBRALES["cpu_percent"]:
+            estado_global = "WARN"
+        if ram > UMBRALES["ram_percent"]:
+            estado_global = "WARN"
+        if disco > UMBRALES["disk_percent"]:
+            estado_global = "CRIT"
+
+        detalles = f"CPU: {cpu:.1f}%, RAM: {ram:.1f}%, Disco: {disco:.1f}%"
+        return True, estado_global, detalles, {"cpu": cpu, "ram": ram, "disco": disco}
+    except Exception as e:
+        return False, "CRIT", f"Error al obtener recursos: {e}", {}
+
+def obtener_info_sistema():
+    """Obtiene hostname e IP local principal."""
+    hostname = platform.node()
+    try:
+        # IP de la interfaz principal
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    return hostname, ip
+
+# ==============================================================================
+# FUNCIONES DE EVALUACIÓN GLOBAL
+# ==============================================================================
+
+def determinar_estado_global(estados_checks):
+    """Determina estado global: CRIT > WARN > OK"""
+    if "CRIT" in estados_checks:
+        return "CRIT"
+    elif "WARN" in estados_checks:
+        return "WARN"
+    else:
+        return "OK"
+
+# ==============================================================================
+# FUNCIONES DE SALIDA
 # ==============================================================================
 
 def crear_ruta_salida(fecha_hoy):
-    """
-    Crea la carpeta del día (si no existe) y devuelve su ruta.
-    Ejemplo: monitorizacion/2025-04-05/
-    """
-    ruta_dia = os.path.join(BASE_DIR, fecha_hoy)
-    os.makedirs(ruta_dia, exist_ok=True)  # exist_ok=True evita error si ya existe
-    return ruta_dia
+    ruta = os.path.join(BASE_DIR, fecha_hoy)
+    os.makedirs(ruta, exist_ok=True)
+    return ruta
 
-def crear_ruta_logs(fecha_hoy):
-    """
-    Crea la subcarpeta 'logs' dentro de la carpeta del día.
-    Ejemplo: monitorizacion/2025-04-05/logs/
-    """
-    ruta_logs = os.path.join(BASE_DIR, fecha_hoy, "logs")
-    os.makedirs(ruta_logs, exist_ok=True)
-    return ruta_logs
-
-# ==============================================================================
-# FUNCIONES DE OBTENCIÓN DE DATOS DEL SISTEMA
-# ==============================================================================
-
-def obtener_servicios_sistema():
-    """
-    Obtiene la lista completa de servicios gestionados por systemd.
-    Filtra solo las líneas que terminan en '.service' para evitar basura.
-    Retorna una lista ordenada y sin duplicados.
-    """
-    try:
-        # Ejecuta: systemctl list-units --type=service --all --no-pager --no-legend
-        result = subprocess.run(
-            ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"],
-            capture_output=True, text=True, check=True
-        )
-        servicios = []
-        for line in result.stdout.strip().split('\n'):
-            if line:
-                # El primer campo es el nombre del servicio
-                nombre = line.split()[0]
-                if nombre.endswith('.service'):
-                    servicios.append(nombre)
-        return sorted(set(servicios))  # Elimina duplicados y ordena
-    except subprocess.CalledProcessError as e:
-        print(f"[ERROR] No se pudieron obtener los servicios: {e}")
-        return []
-
-def obtener_estado_servicio(nombre):
-    """
-    Devuelve el estado actual de un servicio: active, inactive, failed, etc.
-    Usa: systemctl is-active <servicio>
-    """
-    try:
-        result = subprocess.run(["systemctl", "is-active", nombre], capture_output=True, text=True)
-        return result.stdout.strip()
-    except Exception:
-        return "unknown"
-
-def obtener_log_completo_servicio(nombre, num_lineas=LOG_LINES):
-    """
-    Obtiene las últimas 'num_lineas' del log del servicio usando journalctl.
-    Retorna el contenido como una cadena de texto.
-    """
-    try:
-        result = subprocess.run(
-            ["journalctl", "-u", nombre, "-n", str(num_lineas), "--no-pager"],
-            capture_output=True, text=True
-        )
-        if result.stdout.strip():
-            return result.stdout.strip()
-        else:
-            return "(Sin entradas recientes en el log)"
-    except Exception as e:
-        return f"(Error al leer log: {e})"
-
-def obtener_log_resumen(nombre, num_lineas=5):
-    """
-    Obtiene solo las últimas 5 líneas del log para incluirlas en el informe resumido.
-    """
-    log_texto = obtener_log_completo_servicio(nombre, num_lineas)
-    return log_texto.split('\n')
-
-# ==============================================================================
-# FUNCIONES DE GUARDADO DE ARCHIVOS
-# ==============================================================================
-
-def guardar_logs_individuales(nombres_servicios, fecha_hoy):
-    """
-    Guarda un archivo de log por cada servicio en la carpeta 'logs' del día.
-    El nombre del archivo es: servicio_nombre.log
-    """
-    ruta_logs = crear_ruta_logs(fecha_hoy)
-    for nombre in nombres_servicios:
-        contenido = obtener_log_completo_servicio(nombre)
-        nombre_limpio = nombre.replace(".service", "")  # Elimina .service del nombre
-        archivo_log = os.path.join(ruta_logs, f"servicio_{nombre_limpio}.log")
-        with open(archivo_log, 'w', encoding='utf-8') as f:
-            f.write(contenido)
-    print(f"📁 Logs individuales guardados en: {ruta_logs}")
-
-def formatear_informe(servicios_info):
-    """
-    Genera un informe legible en texto plano con el estado y un resumen del log
-    de cada servicio monitorizado.
-    """
-    output = []
-    output.append("=" * 80)
-    output.append("MONITORIZACIÓN DE SERVICIOS DEL SISTEMA")
-    output.append(f"Fecha y hora: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    output.append("=" * 80)
-    output.append("")
-
-    for nombre, estado, log_resumen in servicios_info:
-        output.append(f"🔹 Servicio: {nombre}")
-        output.append(f"   Estado: {estado.upper()}")
-        output.append("   Últimas líneas del log:")
-        for linea in log_resumen:
-            output.append(f"     > {linea}")
-        output.append("-" * 60)
-        output.append("")
-
-    return "\n".join(output)
-
-def guardar_resultado(servicios_info, nombres_monitoreados):
-    """
-    Guarda el informe resumido en la carpeta del día, con nombre dinámico:
-      - Si es un solo servicio: monitor_servicio_NOMBRE_YYYYMMDD_HHMMSS.log
-      - Si son todos:         monitor_servicios_YYYYMMDD_HHMMSS.log
-    También llama a guardar los logs detallados.
-    """
+def guardar_resultado(resultado, modo_auto=False):
+    """Guarda el resultado en JSON y en informe legible."""
     ahora = datetime.datetime.now()
+    fecha_iso = ahora.isoformat()
+    hostname, ip = obtener_info_sistema()
     fecha_hoy = ahora.strftime("%Y-%m-%d")
+    timestamp = ahora.strftime("%Y%m%d_%H%M%S")
 
-    # Decidir nombre del archivo según si es uno o varios servicios
-    if len(nombres_monitoreados) == 1:
-        nombre_servicio = nombres_monitoreados[0].replace(".service", "")
-        nombre_archivo = f"monitor_servicio_{nombre_servicio}_{ahora.strftime('%Y%m%d_%H%M%S')}.log"
+    # Nombre del archivo
+    if modo_auto:
+        nombre_base = f"monitor_web_auto_{timestamp}"
     else:
-        nombre_archivo = f"monitor_servicios_{ahora.strftime('%Y%m%d_%H%M%S')}.log"
+        nombre_base = f"monitor_web_{timestamp}"
 
-    # Ruta completa del informe
-    ruta_dia = crear_ruta_salida(fecha_hoy)
-    ruta_informe = os.path.join(ruta_dia, nombre_archivo)
+    ruta = crear_ruta_salida(fecha_hoy)
+    json_path = os.path.join(ruta, f"{nombre_base}.json")
+    txt_path = os.path.join(ruta, f"{nombre_base}.log")
 
-    # Escribir informe
-    informe = formatear_informe(servicios_info)
-    with open(ruta_informe, 'w', encoding='utf-8') as f:
-        f.write(informe)
+    # Datos completos para JSON
+    datos_json = {
+        "fecha_hora": fecha_iso,
+        "hostname": hostname,
+        "ip": ip,
+        "modo": "automatico" if modo_auto else "manual",
+        "checks": resultado["checks"],
+        "estado_global": resultado["estado_global"]
+    }
 
-    print(f"\n✅ Informe guardado en: {ruta_informe}")
+    # Guardar JSON (procesable)
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(datos_json, f, indent=2, ensure_ascii=False)
 
-    # Guardar logs detallados en subcarpeta 'logs'
-    guardar_logs_individuales(nombres_monitoreados, fecha_hoy)
+    # Generar informe legible
+    lines = []
+    lines.append("=" * 70)
+    lines.append("MONITORIZACIÓN DE SERVICIO WEB")
+    lines.append("=" * 70)
+    lines.append(f"Fecha/hora: {fecha_iso}")
+    lines.append(f"Host: {hostname} ({ip})")
+    lines.append(f"Modo: {'Automático' if modo_auto else 'Manual'}")
+    lines.append("-" * 70)
+
+    for check, info in resultado["checks"].items():
+        lines.append(f"🔹 {check}: {info['estado']} — {info['detalles']}")
+
+    lines.append("-" * 70)
+    lines.append(f"✅ ESTADO GLOBAL: {resultado['estado_global']}")
+    lines.append("=" * 70)
+
+    with open(txt_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(lines))
+
+    print(f"\n✅ Informe guardado en: {txt_path}")
+    print(f"📊 Datos en: {json_path}\n")
+
+def ejecutar_monitorizacion(modo_auto=False):
+    """Ejecuta todos los checks y genera el informe."""
+    print("🔍 Iniciando monitorización del servicio web...")
+    checks_result = {}
+    estados = []
+
+    # 1. Encontrar servicio web activo
+    servicio_activo = None
+    for svc in SERVICIOS_WEB:
+        activo, estado, detalles = check_estado_servicio(svc)
+        if activo:
+            servicio_activo = svc
+            checks_result["servicio"] = {"estado": estado, "detalles": detalles}
+            estados.append(estado)
+            break
+    if not servicio_activo:
+        # Si ninguno está activo, registra el último chequeado
+        svc = SERVICIOS_WEB[0]
+        _, estado, detalles = check_estado_servicio(svc)
+        checks_result["servicio"] = {"estado": estado, "detalles": detalles}
+        estados.append(estado)
+
+    # 2. Puerto escuchando
+    escuchando, estado, detalles = check_puerto_escuchando(PUERTO_WEB)
+    checks_result["puerto"] = {"estado": estado, "detalles": detalles}
+    estados.append(estado)
+
+    # 3. Respuesta HTTP
+    exito, estado, detalles, tiempo, codigo = check_respuesta_http(
+        timeout=UMBRALES["http_timeout"],
+        max_time=UMBRALES["http_max_time"]
+    )
+    checks_result["http"] = {"estado": estado, "detalles": detalles}
+    estados.append(estado)
+
+    # 4. Recursos del sistema
+    exito, estado, detalles, recursos = check_recursos_sistema()
+    checks_result["recursos"] = {"estado": estado, "detalles": detalles}
+    estados.append(estado)
+
+    # Estado global
+    estado_global = determinar_estado_global(estados)
+
+    resultado = {
+        "checks": checks_result,
+        "estado_global": estado_global
+    }
+
+    guardar_resultado(resultado, modo_auto=modo_auto)
+    return estado_global
 
 # ==============================================================================
-# FUNCIONES DE GESTIÓN DE SERVICIOS (start/stop)
+# MENÚ INTERACTIVO (≥5 opciones)
 # ==============================================================================
-
-def gestionar_servicio(nombre, accion):
-    """
-    Ejecuta systemctl start o systemctl stop según la acción solicitada.
-    Muestra mensaje de éxito o error.
-    """
-    if accion == "start":
-        cmd = ["systemctl", "start", nombre]
-    elif accion == "stop":
-        cmd = ["systemctl", "stop", nombre]
-    else:
-        return False
-
-    try:
-        subprocess.run(cmd, check=True)
-        print(f"✅ Servicio '{nombre}' {accion}ado correctamente.")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Error al {accion}ar el servicio '{nombre}': {e}")
-        return False
-
-# ==============================================================================
-# FUNCIONES PRINCIPALES DE MONITORIZACIÓN Y MENÚ
-# ==============================================================================
-
-def monitorizar_servicios(nombres_servicios=None):
-    """
-    Monitoriza uno o varios servicios:
-      - Obtiene estado y resumen del log.
-      - Guarda informe y logs detallados.
-    Si no se pasa lista, monitoriza todos los servicios del sistema.
-    """
-    if nombres_servicios is None:
-        todos = obtener_servicios_sistema()
-        if not todos:
-            print("❌ No se encontraron servicios.")
-            return
-        nombres_servicios = todos
-
-    # Recopilar información de cada servicio
-    servicios_info = []
-    for nombre in nombres_servicios:
-        estado = obtener_estado_servicio(nombre)
-        log_resumen = obtener_log_resumen(nombre)
-        servicios_info.append((nombre, estado, log_resumen))
-
-    # Guardar resultados
-    guardar_resultado(servicios_info, nombres_monitoreados=nombres_servicios)
 
 def menu_interactivo():
-    """
-    Muestra un menú en consola para que el usuario elija acciones manualmente.
-    Asegura que los nombres de servicio terminen en '.service'.
-    """
     print("\n" + "="*50)
-    print("🔧 MONITOR DE SERVICIOS - MODO MANUAL")
+    print("🔧 MONITOR WEB - MODO MANUAL")
     print("="*50)
     while True:
         print("\nOpciones:")
-        print("1. Arrancar un servicio")
-        print("2. Parar un servicio")
-        print("3. Monitorizar solo un servicio")
-        print("4. Monitorizar todos los servicios")
+        print("1. Arrancar servicio web")
+        print("2. Parar servicio web")
+        print("3. Reiniciar servicio web")
+        print("4. Monitorizar servicio web")
+        print("5. Ver estado del sistema (CPU/RAM/DISCO)")
         print("0. Salir")
         opcion = input("\nSelecciona una opción: ").strip()
 
         if opcion == "1":
-            nombre = input("Nombre del servicio a arrancar: ").strip()
-            if nombre and not nombre.endswith('.service'):
-                nombre += '.service'
-            if nombre:
-                gestionar_servicio(nombre, "start")
+            for svc in SERVICIOS_WEB:
+                try:
+                    subprocess.run(["sudo", "systemctl", "start", svc], check=True)
+                    print(f"✅ {svc} arrancado.")
+                    break
+                except subprocess.CalledProcessError:
+                    continue
         elif opcion == "2":
-            nombre = input("Nombre del servicio a detener: ").strip()
-            if nombre and not nombre.endswith('.service'):
-                nombre += '.service'
-            if nombre:
-                gestionar_servicio(nombre, "stop")
+            for svc in SERVICIOS_WEB:
+                try:
+                    subprocess.run(["sudo", "systemctl", "stop", svc], check=True)
+                    print(f"🛑 {svc} detenido.")
+                    break
+                except subprocess.CalledProcessError:
+                    continue
         elif opcion == "3":
-            nombre = input("Nombre del servicio a monitorizar: ").strip()
-            if nombre and not nombre.endswith('.service'):
-                nombre += '.service'
-            if nombre:
-                monitorizar_servicios([nombre])
+            for svc in SERVICIOS_WEB:
+                try:
+                    subprocess.run(["sudo", "systemctl", "restart", svc], check=True)
+                    print(f"🔄 {svc} reiniciado.")
+                    break
+                except subprocess.CalledProcessError:
+                    continue
         elif opcion == "4":
-            monitorizar_servicios()
+            ejecutar_monitorizacion(modo_auto=False)
+        elif opcion == "5":
+            _, estado, detalles, _ = check_recursos_sistema()
+            print(f"\n📊 Recursos del sistema: {detalles} → Estado: {estado}\n")
         elif opcion == "0":
             print("👋 Saliendo...")
             break
@@ -280,26 +307,28 @@ def menu_interactivo():
             print("⚠️ Opción no válida.")
 
 # ==============================================================================
-# PUNTO DE ENTRADA DEL SCRIPT
+# PUNTO DE ENTRADA
 # ==============================================================================
 
 def main():
-    """
-    Detecta si se ejecuta en modo automático (--auto) o manual (menú).
-    """
-    parser = argparse.ArgumentParser(description="Monitor de servicios del sistema")
-    parser.add_argument('--auto', action='store_true', help="Ejecutar en modo automático (monitoriza todos los servicios)")
+    parser = argparse.ArgumentParser(description="Monitor avanzado de servicio web")
+    parser.add_argument('--auto', action='store_true', help="Ejecutar en modo automático (para cron)")
     args = parser.parse_args()
 
     if args.auto:
-        print("▶ Modo automático activado. Monitorizando todos los servicios...")
-        monitorizar_servicios()
+        print("▶ Modo automático: ejecutando chequeo completo...")
+        ejecutar_monitorizacion(modo_auto=True)
     else:
         menu_interactivo()
 
-# ==============================================================================
-# EJECUCIÓN
-# ==============================================================================
-
 if __name__ == "__main__":
+    # Verificar dependencias
+    try:
+        import psutil
+        import requests
+    except ImportError as e:
+        print(f"❌ Error: dependencia faltante: {e}")
+        print("Instala con: pip install psutil requests")
+        sys.exit(1)
+
     main()
