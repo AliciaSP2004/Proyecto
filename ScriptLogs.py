@@ -16,6 +16,18 @@ import json
 import argparse
 import platform
 
+def verificar_dependencias():
+    try:
+        import psutil
+        import requests
+    except ImportError as e:
+        print(f"❌ ERROR: Falta la librería {e.name}.")
+        print("👉 Ejecuta: python3 -m pip install psutil requests")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    verificar_dependencias()
+    main()
 # ==============================================================================
 # CONFIGURACIÓN
 # ==============================================================================
