@@ -1,0 +1,1 @@
+*/5 * * * * /usr/bin/python3 $HOME/Proyecto/ScriptLogs.py --auto >> /var/log/Proyecto/monitorizacion/cron.log 2>&1

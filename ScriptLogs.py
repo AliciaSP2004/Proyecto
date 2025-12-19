@@ -19,7 +19,7 @@ import platform
 # ==============================================================================
 # CONFIGURACIÓN
 # ==============================================================================
-BASE_DIR = "monitorizacion"
+BASE_DIR = "/var/logs/Proyecto/monitorizacion"
 
 # Servicios a monitorizar
 SERVICIOS_WEB = ["apache2.service", "nginx.service"]

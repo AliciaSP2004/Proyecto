@@ -1,0 +1,37 @@
+{
+  "fecha_hora": "2025-12-19T08:16:02.769654",
+  "hostname": "ip-10-0-10-17",
+  "ip": "10.0.10.17",
+  "modo": "automatico",
+  "checks": {
+    "apache2.service": {
+      "estado": "OK",
+      "detalles": "Estado: active"
+    },
+    "ssh.service": {
+      "estado": "OK",
+      "detalles": "Estado: active"
+    },
+    "cron.service": {
+      "estado": "OK",
+      "detalles": "Estado: active"
+    },
+    "servicio_web_detectado": {
+      "estado": "INFO",
+      "detalles": "Servicio web activo: apache2.service"
+    },
+    "puerto_web": {
+      "estado": "OK",
+      "detalles": "Puerto 80 escuchando"
+    },
+    "respuesta_http": {
+      "estado": "OK",
+      "detalles": "HTTP 200, tiempo: 0.00s"
+    },
+    "recursos_sistema": {
+      "estado": "OK",
+      "detalles": "CPU: 2.5%, RAM: 26.1%, Disco: 47.6%"
+    }
+  },
+  "estado_global": "OK"
+}
