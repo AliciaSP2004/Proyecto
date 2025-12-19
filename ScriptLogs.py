@@ -53,7 +53,7 @@ def registrar_accion_manual(accion, resultado):
     print(f"   📌 Acción registrada: {resultado}")
 
 def ejecutar_comando_sudo(comando, servicio_nombre=""):
-    """Ejecuta comando con sudo y captura éxito/error."""
+    """Ejecuta comando con sudo y captura éxito o error."""
     try:
         subprocess.run(["sudo"] + comando, check=True, capture_output=True)
         resultado = f"{servicio_nombre or 'Servicio'} ejecutado correctamente"
