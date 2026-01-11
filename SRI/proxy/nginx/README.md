@@ -17,7 +17,7 @@ server {
 
 ```nginx
 location / {
-    proxy_pass http://10.0.2.31/;
+    proxy_pass http://mis_apps;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -26,27 +26,104 @@ location / {
 }
 ```
 
-### Directivas principales
+## Upstream y balanceo
 
-- **proxy_pass**: Redirige todas las solicitudes al servidor backend en `http://10.0.2.31/`
-- **proxy_set_header Host**: Mantiene el nombre del host original en las cabeceras
-- **proxy_set_header X-Real-IP**: Preserva la IP real del cliente
-- **proxy_set_header X-Forwarded-For**: Incluye la cadena de IPs de clientes proxy
-- **proxy_set_header X-Forwarded-Proto**: Preserva el protocolo original (HTTP/HTTPS)
-- **proxy_redirect off**: No reescribe las redirecciones del servidor backend
+```nginx
+upstream mis_apps {
+    server 10.0.2.31:80;
+    server 10.0.2.106:80;
+    # Opcional: añadir weights, max_fails, fail_timeout:
+    # server 10.0.2.31:80 weight=3 max_fails=2 fail_timeout=30s;
+}
+```
 
-## Funcionamiento
+- Por defecto Nginx usa **round-robin**. Otras opciones: `least_conn` (conexiones activas más bajas) y `ip_hash` (sticky por IP):
 
-Esta configuración establece Nginx como un proxy inverso que:
+```nginx
+# Sticky por IP
+upstream mis_apps {
+    ip_hash;
+    server 10.0.2.31:80;
+    server 10.0.2.106:80;
+}
+```
 
-1. Recibe peticiones en `valles.ddns.net:80`
-2. Reenvía todas las solicitudes al servidor backend en `10.0.2.31`
-3. Preserva información del cliente original en las cabeceras HTTP
-4. Retorna las respuestas del backend al cliente
+- No apuntes `proxy_pass` al propio `server_name` (p. ej. `valles.ddns.net`) ya que puede crear un bucle: usa el nombre del `upstream` o una IP directa.
 
-## Ventajas de esta configuración
+## SSL/TLS y terminación HTTPS 🔒
 
-- **Seguridad**: Oculta la infraestructura del servidor backend
-- **Rendimiento**: Nginx es ligero y rápido en la gestión de proxies
-- **Transparencia de cliente**: Las cabeceras preservan la información original del cliente
-- **Flexibilidad**: Fácilmente configurable para añadir más funcionalidades
+Configura un `server` en `*:443` y activa certificados (Let's Encrypt o comerciales). Ejemplo:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name valles.ddns.net;
+
+    ssl_certificate /etc/letsencrypt/live/valles.ddns.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/valles.ddns.net/privkey.pem;
+
+    location / {
+        proxy_pass http://mis_apps;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+## Comprobaciones y despliegue ✅
+
+- Verifica la configuración antes de recargar:
+
+```bash
+sudo nginx -t
+```
+
+- Recarga Nginx sin cortar conexiones:
+
+```bash
+sudo systemctl reload nginx
+```
+
+- Revisa logs de error y acceso:
+
+```bash
+tail -f /var/log/nginx/error.log
+tail -f /var/log/nginx/access.log
+```
+
+## Health checks y disponibilidad ❤️
+
+- Nginx Open Source no trae health checks activas avanzadas por defecto; considera usar `nginx_upstream_check_module` o `nginx-plus` para health checks activas.
+- Como alternativa, configura `max_fails` y `fail_timeout` en los `server` del `upstream` para una detección pasiva de fallos.
+
+## Pruebas y depuración 🔍
+
+- Petición simple:
+
+```bash
+curl -I -H "Host: valles.ddns.net" http://127.0.0.1/
+```
+
+- Prueba de carga (ejemplo con `ab` o `wrk`):
+
+```bash
+ab -n 100 -c 10 http://valles.ddns.net/
+```
+
+- Comprueba conectividad con los backends:
+
+```bash
+nc -vz 10.0.2.31 80
+nc -vz 10.0.2.106 80
+```
+
+## Buenas prácticas y notas finales ⚠️
+
+- Protege accesos administrativos y usa HTTPS para servicios expuestos.
+- Monitorea los logs y ajusta `LogLevel` / `error_log` según necesites.
+- Evita referencias circulares en `proxy_pass` (usar `upstream` evita este problema).
+
+---
+

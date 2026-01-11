@@ -1,0 +1,20 @@
+upstream mis_apps {
+    server 10.0.2.31:80;
+    server 10.0.2.106:80;
+}
+
+server {
+    listen 80;
+    server_name valles.ddns.net;
+
+    location / {
+        # Usar el upstream definido para balanceo (evita bucles y resuelve a los backends)
+        proxy_pass http://mis_apps;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+}
+
