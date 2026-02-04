@@ -1,0 +1,7 @@
+# Carpetas y archivos que no queremos subir
+.terraform/
+*.tfstate
+*.tfstate.backup
+crash.log
+*.tfvars
+.terraform.lock.hcl
