@@ -7,6 +7,9 @@ resource "aws_vpc" "vpc" {
   }
 }
 
+
+
+
 # Subredes
 resource "aws_subnet" "publica" {
   vpc_id                  = aws_vpc.vpc.id
@@ -28,6 +31,9 @@ resource "aws_subnet" "privada" {
     Name = "privada"
   }
 }
+
+
+
 
 # Internet Gateway
 resource "aws_internet_gateway" "igw" {
@@ -61,13 +67,16 @@ resource "aws_route_table" "privada_tr" {
   tags = {
         Name = "privada_tr"
     }
-
 }
 
 resource "aws_route_table_association" "privada_asoc" {
   subnet_id      = aws_subnet.privada.id
   route_table_id = aws_route_table.privada_tr.id
 }
+
+
+
+
 
 # Security Group Proxy
 resource "aws_security_group" "proxy_sg" {
@@ -86,6 +95,13 @@ resource "aws_security_group" "proxy_sg" {
     description = "HTTPS desde Internet"
     from_port   = 443
     to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    description = "SSH desde Internet"
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -129,7 +145,12 @@ resource "aws_security_group" "privado_sg" {
   }
 }
 
+
+
+
+
 # Instancias EC2 
+# EC2 pública (Proxy)
 resource "aws_instance" "proxy" {
   ami                    = var.ami_id
   instance_type          = var.tipo_instancia
@@ -140,7 +161,12 @@ resource "aws_instance" "proxy" {
     Name = "proxy"
   }
 }
-
+# IP Elástica para el Proxy
+resource "aws_eip" "proxy_ip" {
+  instance = aws_instance.proxy.id
+  domain   = "vpc"
+  tags     = { Name = "ip-proxy" }
+}
 
 # EC2 privadas
 resource "aws_instance" "www1" {
@@ -148,7 +174,7 @@ resource "aws_instance" "www1" {
   instance_type          = var.tipo_instancia
   subnet_id              = aws_subnet.privada.id
   vpc_security_group_ids = [aws_security_group.privado_sg.id]
-
+  private_ip    = var.ip_www1
   tags = {
     Name = "www1"
   }
@@ -159,7 +185,7 @@ resource "aws_instance" "www2" {
   instance_type          = var.tipo_instancia
   subnet_id              = aws_subnet.privada.id
   vpc_security_group_ids = [aws_security_group.privado_sg.id]
-
+  private_ip    = var.ip_www2
   tags = {
     Name = "www2"
   }
