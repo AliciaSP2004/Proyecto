@@ -42,3 +42,8 @@ variable "ip_www2" {
   description = "IP privada para la EC2 www2"
   default     = "10.0.2.106"
 }
+variable "ip_moni" {
+  description = "IP privada para la EC2 moni"
+  default     = "10.0.2.105"
+}
+

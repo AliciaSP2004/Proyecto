@@ -135,6 +135,32 @@ resource "aws_security_group" "privado_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.proxy_sg.id]
   }
+    ingress {
+    description     = "SSH desde proxy"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.proxy_sg.id]
+  }
+
+  egress {
+    description = "Salida libre"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+resource "aws_security_group" "moni_sg" {
+  name   = "moni_sg"
+  vpc_id = aws_vpc.vpc.id
+   ingress {
+    description     = "SSH desde proxy"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.proxy_sg.id]
+  }
 
   egress {
     description = "Salida libre"
@@ -146,17 +172,14 @@ resource "aws_security_group" "privado_sg" {
 }
 
 
-
-
-
 # Instancias EC2 
 # EC2 pública (Proxy)
 resource "aws_instance" "proxy" {
   ami                    = var.ami_id
   instance_type          = var.tipo_instancia
+  key_name = aws_key_pair.proxy.key_name
   subnet_id              = aws_subnet.publica.id
   vpc_security_group_ids = [aws_security_group.proxy_sg.id]
-
   tags = {
     Name = "proxy"
   }
@@ -175,6 +198,7 @@ resource "aws_instance" "www1" {
   subnet_id              = aws_subnet.privada.id
   vpc_security_group_ids = [aws_security_group.privado_sg.id]
   private_ip    = var.ip_www1
+  key_name = aws_key_pair.proxy.key_name
   tags = {
     Name = "www1"
   }
@@ -186,9 +210,21 @@ resource "aws_instance" "www2" {
   subnet_id              = aws_subnet.privada.id
   vpc_security_group_ids = [aws_security_group.privado_sg.id]
   private_ip    = var.ip_www2
+  key_name = aws_key_pair.proxy.key_name
   tags = {
     Name = "www2"
   }
 }
 
+resource "aws_instance" "moni" {
+  ami                    = var.ami_id
+  instance_type          = var.tipo_instancia
+  subnet_id              = aws_subnet.privada.id
+  vpc_security_group_ids = [aws_security_group.moni_sg.id]
+  private_ip    = var.ip_moni
+  key_name = aws_key_pair.proxy.key_name
+  tags = {
+    Name = "moni"
+  }
+}
 
