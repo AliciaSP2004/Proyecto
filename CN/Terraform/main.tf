@@ -64,6 +64,10 @@ resource "aws_route_table_association" "publica_asoc" {
 # Tabla de rutas privada
 resource "aws_route_table" "privada_tr" {
   vpc_id = aws_vpc.vpc.id
+  route {
+    cidr_block  = "0.0.0.0/0"
+    network_interface_id = aws_instance.proxy.primary_network_interface_id
+  }
   tags = {
         Name = "privada_tr"
     }
@@ -105,6 +109,13 @@ resource "aws_security_group" "proxy_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  ingress {
+    description = "Trafico desde la subred privada para NAT"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [var.privada_cidr]
+  }
 
   egress {
     description = "Salida libre"
@@ -115,7 +126,9 @@ resource "aws_security_group" "proxy_sg" {
   }
 }
 
+
 # Security Group EC2 privadas
+# Security Group www1 y www2
 resource "aws_security_group" "privado_sg" {
   name   = "privado_sg"
   vpc_id = aws_vpc.vpc.id
@@ -151,6 +164,7 @@ resource "aws_security_group" "privado_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+# Security Group instancia de monitorización
 resource "aws_security_group" "moni_sg" {
   name   = "moni_sg"
   vpc_id = aws_vpc.vpc.id
@@ -161,7 +175,13 @@ resource "aws_security_group" "moni_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.proxy_sg.id]
   }
-
+  ingress {
+    description     = "Métricas desde las webs"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.privado_sg.id]
+  }
   egress {
     description = "Salida libre"
     from_port   = 0
@@ -173,16 +193,36 @@ resource "aws_security_group" "moni_sg" {
 
 
 # Instancias EC2 
+
 # EC2 pública (Proxy)
 resource "aws_instance" "proxy" {
   ami                    = var.ami_id
   instance_type          = var.tipo_instancia
-  key_name = aws_key_pair.proxy.key_name
+  key_name = var.key_name
   subnet_id              = aws_subnet.publica.id
   vpc_security_group_ids = [aws_security_group.proxy_sg.id]
+  source_dest_check      = false
   tags = {
     Name = "proxy"
   }
+  user_data = <<-EOF
+              #!/bin/bash
+              # Esperar a que el sistema termine de arrancar procesos internos
+              sleep 30
+              
+              # Habilitar forwarding (en caliente y permanente)
+              sysctl -w net.ipv4.ip_forward=1
+              echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+
+              # Configurar NAT
+              iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+              
+              # Instalación no interactiva para evitar que el script se cuelgue
+              apt-get update
+              echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
+              echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
+              DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
+              EOF
 }
 # IP Elástica para el Proxy
 resource "aws_eip" "proxy_ip" {
@@ -198,7 +238,7 @@ resource "aws_instance" "www1" {
   subnet_id              = aws_subnet.privada.id
   vpc_security_group_ids = [aws_security_group.privado_sg.id]
   private_ip    = var.ip_www1
-  key_name = aws_key_pair.proxy.key_name
+  key_name = "vockey"
   tags = {
     Name = "www1"
   }
@@ -210,7 +250,7 @@ resource "aws_instance" "www2" {
   subnet_id              = aws_subnet.privada.id
   vpc_security_group_ids = [aws_security_group.privado_sg.id]
   private_ip    = var.ip_www2
-  key_name = aws_key_pair.proxy.key_name
+  key_name = "vockey"
   tags = {
     Name = "www2"
   }
@@ -222,7 +262,7 @@ resource "aws_instance" "moni" {
   subnet_id              = aws_subnet.privada.id
   vpc_security_group_ids = [aws_security_group.moni_sg.id]
   private_ip    = var.ip_moni
-  key_name = aws_key_pair.proxy.key_name
+  key_name = "vockey"
   tags = {
     Name = "moni"
   }

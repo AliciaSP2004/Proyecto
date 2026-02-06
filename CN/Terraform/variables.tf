@@ -47,3 +47,8 @@ variable "ip_moni" {
   default     = "10.0.2.105"
 }
 
+variable "key_name" {
+  description = "Nombre de la llave vockey"
+  type        = string
+  default     = "vockey"
+}

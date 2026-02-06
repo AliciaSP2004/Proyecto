@@ -1,6 +1,6 @@
 output "ip_publica_proxy" {
   description = "IP pública del Proxy"
-  value       = aws_instance.proxy.public_ip
+  value       = aws_eip.proxy_ip.public_ip
 }
 
 output "ip_privada_proxy" {
@@ -18,3 +18,7 @@ output "ip_www2" {
   value       = aws_instance.www2.private_ip
 }
 
+output "ip_moni" {
+  description = "IP privada de la EC2 privada 1"
+  value       = aws_instance.moni.private_ip
+}
