@@ -1,0 +1,56 @@
+---
+- name: Desplegar Docker y MariaDB en Ubuntu
+  hosts: all
+  become: yes
+  vars:
+    repo_github: "https://github.com/AliciaSP2004/Proyecto.git"
+    directorio_repo: "/home/ubuntu"
+    directorio_compose: "{{ directorio_repo }}/IAW/docker/docker-compose"
+
+  tasks:
+    - name: Actualizar sistema
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoclean: yes
+        autoremove: yes
+
+    - name: Instalar Docker
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+
+    - name: Iniciar Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Crear directorio del repositorio
+      file:
+        path: "{{ directorio_repo }}"
+        state: directory
+        mode: '0755'
+
+    - name: Descargar repositorio de GitHub
+      git:
+        repo: "{{ repo_github }}"
+        dest: "{{ directorio_repo }}"
+        version: main
+        update: yes
+
+    - name: Ejecutar Docker Compose
+      shell: docker-compose up -d
+      args:
+        chdir: "{{ directorio_compose }}"
+
+    - name: Ver contenedores en ejecución
+      shell: docker ps
+      register: contenedores
+
+    - name: Mostrar contenedores
+      debug:
+        msg: "{{ contenedores.stdout }}"
