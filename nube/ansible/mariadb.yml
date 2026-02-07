@@ -48,9 +48,7 @@
         chdir: "{{ directorio_compose }}"
       register: compose_result
 
-    - name: Verificar contenedores en ejecución
-      shell: docker ps --format "table {{.Names}}\t{{.Status}}"
-      register: contenedores
+ 
 
     - name: Mostrar estado de contenedores
       debug:
