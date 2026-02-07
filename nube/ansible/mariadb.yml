@@ -48,13 +48,6 @@
         chdir: "{{ directorio_compose }}"
       register: compose_result
 
-    - name: Esperar a que MariaDB esté listo
-      shell: docker exec valles_mariadb mysql -u asier -pusuario@1 -e "SELECT 1" valles_db
-      retries: 10
-      delay: 3
-      register: db_check
-      until: db_check.rc == 0
-
     - name: Verificar contenedores en ejecución
       shell: docker ps --format "table {{.Names}}\t{{.Status}}"
       register: contenedores
