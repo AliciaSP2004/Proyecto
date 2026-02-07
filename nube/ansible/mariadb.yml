@@ -48,8 +48,6 @@
         chdir: "{{ directorio_compose }}"
       register: compose_result
 
- 
-
     - name: Mostrar estado de contenedores
       debug:
         msg: |
