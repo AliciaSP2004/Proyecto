@@ -13,7 +13,8 @@ services:
       MYSQL_USER: asier
       MYSQL_PASSWORD: usuario@1
     volumes:
-      - /home/ubuntu/Proyecto/ASGBD/sql/proyecto.sql:/docker-entrypoint-initdb.d/proyecto.sql
+      - /home/ubuntu/Proyecto/ASGBD/sql/proyecto.sql:/docker-entrypoint-initdb.d/01-proyecto.sql
+      - /home/ubuntu/Proyecto/ASGBD/sql/permisos.sql:/docker-entrypoint-initdb.d/02-permisos.sql
     networks:
       - wordpress_network
 
