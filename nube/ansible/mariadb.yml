@@ -1,11 +1,11 @@
 ---
 - name: Desplegar Docker y MariaDB en Ubuntu
-  hosts: all
+  hosts: aws_ubuntu
   become: yes
   vars:
     repo_github: "https://github.com/AliciaSP2004/Proyecto.git"
     directorio_repo: "/home/ubuntu"
-    directorio_compose: "{{ directorio_repo }}/IAW/docker/docker-compose"
+    directorio_compose: "/home/ubuntu/Proyecto/IAW/docker"
 
   tasks:
     - name: Actualizar sistema
@@ -38,14 +38,14 @@
     - name: Descargar repositorio de GitHub
       git:
         repo: "{{ repo_github }}"
-        dest: "{{ directorio_repo }}"
+        dest: "{{ directorio_repo }}/Proyecto"
         version: main
         update: yes
 
+  
+
     - name: Ejecutar Docker Compose
-      shell: docker-compose up -d
-      args:
-        chdir: "{{ directorio_compose }}"
+      shell: cd /home/ubuntu/Proyecto/IAW/docker && sudo docker-compose up -d
 
     - name: Ver contenedores en ejecución
       shell: docker ps
