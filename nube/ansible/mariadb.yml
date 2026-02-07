@@ -42,10 +42,32 @@
         version: main
         update: yes
 
-  
+    - name: Detener contenedor MariaDB si existe
+      shell: docker stop valles_mariadb || true
+      ignore_errors: yes
+
+    - name: Eliminar contenedor MariaDB si existe
+      shell: docker rm valles_mariadb || true
+      ignore_errors: yes
+
+    - name: Eliminar volumen mariadb_data si existe
+      shell: docker volume rm docker_mariadb_data || true
+      ignore_errors: yes
 
     - name: Ejecutar Docker Compose
-      shell: cd /home/ubuntu/Proyecto/IAW/docker && sudo docker-compose up -d
+      shell: docker-compose up -d
+      args:
+        chdir: "{{ directorio_compose }}"
+      register: compose_result
+      failed_when: false
+
+    - name: Esperar a que MariaDB esté listo
+      shell: sleep 5 && docker exec valles_mariadb mysql -u asier -pusuario@1 -e "SELECT 1" valles_db
+      register: db_check
+      until: db_check.rc == 0
+      retries: 5
+      delay: 5
+      failed_when: false
 
     - name: Ver contenedores en ejecución
       shell: docker ps
