@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:latest
+    container_name: valles_mariadb
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: usuario@1
+      MYSQL_DATABASE: valles_db
+      MYSQL_USER: asier
+      MYSQL_PASSWORD: usuario@1
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      # Ubicacion donde se encuentra el mysql
+      - ~/Proyecto/ASGBD/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - wordpress_network
+
+volumes:
+  mariadb_data:
+
+networks:
+  wordpress_network:
+    driver: bridge
