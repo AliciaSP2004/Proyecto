@@ -15,7 +15,7 @@ services:
     volumes:
       - mariadb_data:/var/lib/mysql
       # Ubicacion donde se encuentra el mysql
-      - /home/ubuntu/Proyecto/ASGBD/sql/datos.sql:/docker-entrypoint-initdb.d/init.sql
+      - /home/ubuntu/Proyecto/ASGBD/sql/proyecto.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - wordpress_network
 
