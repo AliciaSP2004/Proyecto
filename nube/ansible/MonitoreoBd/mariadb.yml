@@ -8,67 +8,36 @@
     directorio_compose: "/home/ubuntu/Proyecto/IAW/docker"
 
   tasks:
-    - name: Actualizar sistema
-      apt:
-        update_cache: yes
-        upgrade: dist
-        autoclean: yes
-        autoremove: yes
-
-    - name: Instalar paquetes prerequisitos para Docker
-      apt:
-        name:
-          - ca-certificates
-          - curl
-          - gnupg
-          - lsb-release
-        state: present
-
-    - name: Añadir clave GPG oficial de Docker
-      shell: |
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-      args:
-        creates: /usr/share/keyrings/docker-archive-keyring.gpg
-
-    - name: Añadir repositorio oficial de Docker
-      shell: |
-        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-    - name: Actualizar cache APT después de añadir repo Docker
+    - name: Actualizar caché de APT
       apt:
         update_cache: yes
 
     - name: Instalar Docker y Docker Compose
       apt:
         name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-          - docker-compose-plugin
+          - docker.io
+          - docker-compose
         state: present
-        update_cache: yes
 
     - name: Iniciar y habilitar Docker
-      service:
+      systemd:
         name: docker
         state: started
         enabled: yes
-
-    - name: Crear directorio del repositorio
-      file:
-        path: "{{ directorio_repo }}"
-        state: directory
-        mode: '0755'
 
     - name: Descargar repositorio de GitHub
       git:
         repo: "{{ repo_github }}"
         dest: "{{ directorio_repo }}/Proyecto"
         version: main
-        update: yes
+        force: yes
 
     - name: Ejecutar Docker Compose
-      shell: docker compose up -d
+      shell: docker-compose up -d
       args:
         chdir: "{{ directorio_compose }}"
       register: compose_result
+
+    - name: Mostrar resultado de Docker Compose
+      debug:
+        msg: "{{ compose_result.stdout_lines }}"
