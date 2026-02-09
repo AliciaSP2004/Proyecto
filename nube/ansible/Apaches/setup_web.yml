@@ -5,10 +5,10 @@
   become: true
   vars:
     # Ruta de origen en la máquina de control: por defecto apunta a la carpeta 'files' del playbook.
-    apache_config_src: "/home/usuario/Proyecto/SRI/Paginaweb/ConfFinal.conf"
-    script_src: "/home/usuario/Proyecto/SRI/Paginaweb/chequeoApache.sh"
+    apache_config_src: "/home/ubuntu/Proyecto/SRI/Paginaweb/ConfFinal.conf"
+    script_src: "/home/ubuntu/Proyecto/SRI/Paginaweb/chequeoApache.sh"
     remote_script_path: "/opt/scripts/chequeoApache.sh"
-    private_index_src: "/home/usuario/Proyecto/SRI/Paginaweb/PaginaPrivada/index.html"
+    private_index_src: "/home/ubuntu/Proyecto/SRI/Paginaweb/PaginaPrivada/index.html"
     remote_privado_dir: "/var/www/mipagina"
     remote_config_path: "/etc/apache2/sites-available/ConfFinal.conf"
     packages:
