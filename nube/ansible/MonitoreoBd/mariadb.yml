@@ -8,35 +8,35 @@
     directorio_compose: "/home/ubuntu/Proyecto/IAW/docker"
 
   tasks:
-    - name: Limpiar cache de APT y desbloquear dependencias
+    - name: Reparar dependencias rotas del sistema
       shell: |
-        apt-get clean
-        apt-get autoclean
-        apt-get autoremove -y
+        apt-get install -f -y --fix-broken
+        apt-get autoclean -y
+        apt-get clean -y
         apt-get update
-
-    - name: Instalar Docker
-      shell: |
-        apt-get install -y docker.io
-
-    - name: Instalar Docker Compose
-      shell: |
-        apt-get install -y docker-compose
       ignore_errors: yes
 
-    - name: Descarga alternativa de Docker Compose si APT falla
+    - name: Instalar Docker desde repositorio oficial
+      shell: |
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        rm -f get-docker.sh
+      ignore_errors: yes
+
+    - name: Descargar Docker Compose desde GitHub
       shell: |
         curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
         chmod +x /usr/local/bin/docker-compose
-      when: ansible_distribution == "Ubuntu"
+        docker-compose --version
       ignore_errors: yes
 
-    - name: Iniciar y habilitar Docker
+    - name: Iniciar Docker
       systemd:
         name: docker
         state: started
         enabled: yes
         daemon_reload: yes
+      ignore_errors: yes
 
     - name: Descargar repositorio de GitHub
       git:
@@ -44,6 +44,7 @@
         dest: "{{ directorio_repo }}/Proyecto"
         version: main
         force: yes
+      ignore_errors: yes
 
     - name: Ejecutar Docker Compose
       shell: docker-compose up -d
