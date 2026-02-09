@@ -1,6 +1,6 @@
 ---
 - name: Desplegar Docker y MariaDB en Ubuntu
-  hosts: 10.0.2.105
+  hosts: aws
   become: yes
   vars:
     repo_github: "https://github.com/AliciaSP2004/Proyecto.git"
