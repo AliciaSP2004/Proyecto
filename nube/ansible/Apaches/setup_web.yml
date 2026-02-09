@@ -1,7 +1,7 @@
 # Playbook: configura servidor web, reemplaza config Apache y crea cron
 # Comentarios: cada tarea contiene un comentario breve explicando lo que hace.
 - name: Configurar servidor web y cron de chequeo Apache
-  hosts: all
+  hosts: aws
   become: true
   vars:
     # Ruta de origen en la máquina de control: por defecto apunta a la carpeta 'files' del playbook.
