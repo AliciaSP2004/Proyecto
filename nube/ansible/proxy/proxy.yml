@@ -170,7 +170,7 @@
 
     - name: "PASO 6: Copiar clave SSH del laboratorio"
       shell: |
-        cp /home/usuario/Proyecto/nube/ansible/proxy/.ssh/prueba.pem /home/ubuntu/.ssh/prueba.pem
+        cp /home/ubuntu/Proyecto/nube/ansible/proxy/.ssh/prueba.pem /home/ubuntu/.ssh/prueba.pem
         chown ubuntu:ubuntu /home/ubuntu/.ssh/prueba.pem
         chmod 600 /home/ubuntu/.ssh/prueba.pem
       become: yes
