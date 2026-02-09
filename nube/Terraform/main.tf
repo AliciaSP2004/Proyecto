@@ -205,24 +205,6 @@ resource "aws_instance" "proxy" {
   tags = {
     Name = "proxy"
   }
-  user_data = <<-EOF
-              #!/bin/bash
-              # Esperar a que el sistema termine de arrancar procesos internos
-              sleep 30
-              
-              # Habilitar forwarding (en caliente y permanente)
-              sysctl -w net.ipv4.ip_forward=1
-              echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
-
-              # Configurar NAT
-              iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-              
-              # Instalación no interactiva para evitar que el script se cuelgue
-              apt-get update
-              echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
-              echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
-              DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
-              EOF
 }
 # IP Elástica para el Proxy
 resource "aws_eip" "proxy_ip" {
