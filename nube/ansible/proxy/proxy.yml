@@ -235,9 +235,9 @@
     # 9. EJECUCIÓN DE PLAYBOOKS INTERNOS
     # ========================================================================
     - name: "PASO 9: Ejecutar playbook de Apache para máquinas internas"
-      command: |
-        ansible-playbook {{ ruta_playbook_apaches }} 
-        -i {{ playbook_dir }}/host.ini
+      shell: |
+        cd /home/ubuntu/Proyecto/nube/ansible/Apaches && ansible-playbook setup_web.yml
+      become: yes
       register: resultado_playbook_apache
       ignore_errors: yes
 
@@ -246,9 +246,9 @@
         msg: "{{ resultado_playbook_apache.stdout_lines }}"
 
     - name: "PASO 9: Ejecutar playbook de Monitoreo BD para máquinas internas"
-      command: |
-        ansible-playbook {{ ruta_playbook_monitores }}
-        -i {{ playbook_dir }}/host.ini
+      shell: |
+        cd /home/ubuntu/Proyecto/nube/ansible/MonitoreoBd && ansible-playbook mariadb.yml
+      become: yes
       register: resultado_playbook_monitores
       ignore_errors: yes
 
