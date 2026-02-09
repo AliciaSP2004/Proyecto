@@ -15,11 +15,36 @@
         autoclean: yes
         autoremove: yes
 
-    - name: Instalar Docker y docker-compose
+    - name: Instalar paquetes prerequisitos para Docker
       apt:
         name:
-          - docker.io
-          - docker-compose
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Añadir clave GPG oficial de Docker
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+    - name: Añadir repositorio oficial de Docker
+      shell: |
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    - name: Actualizar cache APT después de añadir repo Docker
+      apt:
+        update_cache: yes
+
+    - name: Instalar Docker y Docker Compose
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
         state: present
         update_cache: yes
 
@@ -43,7 +68,7 @@
         update: yes
 
     - name: Ejecutar Docker Compose
-      shell: docker-compose up -d
+      shell: docker compose up -d
       args:
         chdir: "{{ directorio_compose }}"
       register: compose_result
