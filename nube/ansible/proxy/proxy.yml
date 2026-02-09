@@ -26,7 +26,7 @@
     directorio_configuracion_caddy: "{{ directorio_repositorio_local }}/caddy"
     directorio_configuracion_apache: "{{ directorio_repositorio_local }}/apache"
     directorio_configuracion_nginx: "{{ directorio_repositorio_local }}/nginx"
-    directorio_claves: "/home/ubuntu/Proyecto/nube/proxy/.ssh"
+    directorio_claves: "/home/usuario/Proyecto/nube/ansible/proxy/.ssh"
     
     # Variables de sistemas y servicios
     ruta_destino_caddy: "/etc/caddy"
@@ -35,7 +35,7 @@
     ruta_destino_proyecto: "/home/ubuntu/Proyecto"
     
     # URL del repositorio
-    url_repositorio: "https://AsierRodriguezO@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:github.com/AliciaSP2004/Proyecto.git"
+    url_repositorio: "https://AsierRodriguezO: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@github.com/AliciaSP2004/Proyecto.git"
     
     # Directorios de playbooks internos
     ruta_playbook_apaches: "/home/usuario/Proyecto/nube/ansible/Apaches/setup_web.yml"
@@ -77,19 +77,21 @@
         state: present
         reload: yes
 
+    - name: "PASO 2: Crear directorio de iptables si no existe"
+      file:
+        path: /etc/iptables
+        state: directory
+        mode: '0755'
+
     - name: "PASO 2: Configurar iptables para NAT en forwarding"
-      iptables:
-        table: nat
-        chain: POSTROUTING
-        out_interface: ens5 ## Cambiar a la interfaz de salida correcta si es necesario
-        jump: MASQUERADE
-        comment: "Configuración NAT para puerta de enlace"
+      shell: |
+        sudo iptables -t nat -A POSTROUTING -o ens5 -j MASQUERADE
+      become: yes
 
     - name: "PASO 2: Guardar configuración de iptables"
       shell: |
         iptables-save > /etc/iptables/rules.v4
-      args:
-        creates: /etc/iptables/rules.v4
+      become: yes
 
     - name: "PASO 2: Instalar iptables-persistent para persistencia"
       apt:
@@ -166,14 +168,12 @@
         group: ubuntu
         mode: '0700'
 
-    - name: "PASO 6: Copiar claves SSH del laboratorio"
-      copy:
-        src: "{{ directorio_claves }}/"
-        dest: "/home/ubuntu/.ssh/"
-        owner: ubuntu
-        group: ubuntu
-        mode: '0600'
-        force: yes
+    - name: "PASO 6: Copiar clave SSH del laboratorio"
+      shell: |
+        cp /home/usuario/Proyecto/nube/ansible/proxy/.ssh/prueba.pem /home/ubuntu/.ssh/prueba.pem
+        chown ubuntu:ubuntu /home/ubuntu/.ssh/prueba.pem
+        chmod 600 /home/ubuntu/.ssh/prueba.pem
+      become: yes
 
     - name: "PASO 6: Establecer permisos correctos en directorio SSH"
       file:
