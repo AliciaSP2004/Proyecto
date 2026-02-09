@@ -19,6 +19,11 @@ output "ip_www2" {
 }
 
 output "ip_moni" {
-  description = "IP privada de la EC2 privada 1"
+  description = "IP privada de la EC2 monitorizacion"
   value       = aws_instance.moni.private_ip
+}
+
+output "ip_bd" {
+  description = "IP privada de la EC2 base_datos"
+  value       = aws_instance.bd.private_ip
 }

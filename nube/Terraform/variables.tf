@@ -43,10 +43,14 @@ variable "ip_www2" {
   default     = "10.0.2.106"
 }
 variable "ip_moni" {
-  description = "IP privada para la EC2 moni"
+  description = "IP privada para la EC2 monitorizacion"
   default     = "10.0.2.105"
 }
 
+variable "ip_bd" {
+  description = "IP privada para la EC2 base_datos"
+  default     = "10.0.2.110"
+}
 variable "key_name" {
   description = "Nombre de la llave vockey"
   type        = string

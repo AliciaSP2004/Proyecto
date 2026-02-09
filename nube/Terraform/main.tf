@@ -175,12 +175,36 @@ resource "aws_security_group" "moni_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.proxy_sg.id]
   }
-  ingress {
-    description     = "Métricas desde las webs"
-    from_port       = 3306
-    to_port         = 3306
+  egress {
+    description = "Salida libre"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Regla de ingress separada para evitar ciclo de dependencias
+resource "aws_security_group_rule" "moni_from_bd" {
+  type              = "ingress"
+  from_port         = 3306
+  to_port           = 3306
+  protocol          = "tcp"
+  security_group_id = aws_security_group.moni_sg.id
+  source_security_group_id = aws_security_group.bd_sg.id
+  description       = "Metricas desde la base de datos"
+}
+
+# Security Group instancia de base de datos
+resource "aws_security_group" "bd_sg" {
+  name   = "bd_sg"
+  vpc_id = aws_vpc.vpc.id
+    ingress {
+    description     = "SSH desde proxy"
+    from_port       = 22
+    to_port         = 22
     protocol        = "tcp"
-    security_groups = [aws_security_group.privado_sg.id]
+    security_groups = [aws_security_group.proxy_sg.id]
   }
   egress {
     description = "Salida libre"
@@ -191,6 +215,16 @@ resource "aws_security_group" "moni_sg" {
   }
 }
 
+# Regla de ingress separada para evitar ciclo de dependencias
+resource "aws_security_group_rule" "bd_from_moni" {
+  type              = "ingress"
+  from_port         = 3306
+  to_port           = 3306
+  protocol          = "tcp"
+  security_group_id = aws_security_group.bd_sg.id
+  source_security_group_id = aws_security_group.moni_sg.id
+  description       = "Acceso a MySQL desde monitorizacion"
+}
 
 # Instancias EC2 
 
@@ -246,7 +280,18 @@ resource "aws_instance" "moni" {
   private_ip    = var.ip_moni
   key_name = "vockey"
   tags = {
-    Name = "moni"
+    Name = "monitorizacion"
   }
 }
 
+resource "aws_instance" "bd" {
+  ami                    = var.ami_id
+  instance_type          = var.tipo_instancia
+  subnet_id              = aws_subnet.privada.id
+  vpc_security_group_ids = [aws_security_group.bd_sg.id]
+  private_ip    = var.ip_bd
+  key_name = "vockey"
+  tags = {
+    Name = "Base_Datos"
+  }
+}
