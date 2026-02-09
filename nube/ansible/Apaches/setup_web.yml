@@ -1,0 +1,107 @@
+# Playbook: configura servidor web, reemplaza config Apache y crea cron
+# Comentarios: cada tarea contiene un comentario breve explicando lo que hace.
+- name: Configurar servidor web y cron de chequeo Apache
+  hosts: all
+  become: true
+  vars:
+    # Ruta de origen en la máquina de control: por defecto apunta a la carpeta 'files' del playbook.
+    apache_config_src: "/home/usuario/Proyecto/SRI/Paginaweb/ConfFinal.conf"
+    script_src: "/home/usuario/Proyecto/SRI/Paginaweb/chequeoApache.sh"
+    remote_script_path: "/opt/scripts/chequeoApache.sh"
+    private_index_src: "/home/usuario/Proyecto/SRI/Paginaweb/PaginaPrivada/index.html"
+    remote_privado_dir: "/var/www/mipagina"
+    remote_config_path: "/etc/apache2/sites-available/ConfFinal.conf"
+    packages:
+      - php
+      - python3
+      - mariadb-client
+      - apache2
+
+  tasks:
+    - name: Actualizar caché APT
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Actualizar paquetes instalados
+      apt:
+        upgrade: dist
+
+    - name: Instalar paquetes necesarios
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: yes
+
+    - name: Crear carpeta de scripts remotos
+      file:
+        path: /opt/scripts
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Crear directorio para la página privada
+      file:
+        path: "{{ remote_privado_dir }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Copiar `index.html` a /var/www/mipagina
+      copy:
+        src: "{{ private_index_src }}"
+        dest: "{{ remote_privado_dir }}/index.html"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+        backup: yes
+      notify: Reiniciar Apache
+
+    - name: Copiar configuración de Apache (origen control node)
+      copy:
+        src: "{{ apache_config_src }}"
+        dest: "{{ remote_config_path }}"
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+      notify: Reiniciar Apache
+
+    - name: Habilitar site Apache (sites-available -> sites-enabled)
+      command: a2ensite ConfFinal.conf
+      register: a2ensite
+      changed_when: a2ensite.rc == 0
+      failed_when: a2ensite.rc not in [0,1]
+      ignore_errors: yes
+      notify: Reiniciar Apache
+
+    - name: Deshabilitar site por defecto 000-default
+      command: a2dissite 000-default.conf
+      register: a2dissite
+      changed_when: a2dissite.rc == 0
+      failed_when: a2dissite.rc not in [0,1]
+      ignore_errors: yes
+      notify: Reiniciar Apache
+
+    - name: Copiar script de chequeo desde control node
+      copy:
+        src: "{{ script_src }}"
+        dest: "{{ remote_script_path }}"
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Crear entrada de cron cada 5 minutos para el script
+      cron:
+        name: "Chequeo Apache cada 5 minutos"
+        minute: "*/5"
+        user: root
+        job: "{{ remote_script_path }} >/dev/null 2>&1"
+
+  handlers:
+    - name: Reiniciar Apache
+      service:
+        name: apache2
+        state: restarted
