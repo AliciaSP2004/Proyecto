@@ -1,0 +1,312 @@
+---
+# ============================================================================
+# Playbook para Configurar Proxy/Gateway en AWS
+# ============================================================================
+# Descripción: Este playbook configura una máquina proxy que actúa como
+# puerta de enlace para la red interna. Realiza las siguientes tareas:
+# 1. Actualización del sistema
+# 2. Configuración como puerta de enlace (forwarding)
+# 3. Instalación de Apache, Nginx y Caddy
+# 4. Copia de configuraciones
+# 5. Git clone del repositorio
+# 6. Copia de claves del laboratorio
+# 7. Activación de solo Caddy
+# 8. Instalación de Ansible
+# 9. Ejecución de playbooks internos
+# ============================================================================
+
+- name: Configurar Proxy/Gateway en AWS
+  hosts: aws
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    # Variables de directorios y rutas
+    directorio_repositorio_local: "/home/usuario/Proyecto/SRI/proxy"
+    directorio_configuracion_caddy: "{{ directorio_repositorio_local }}/caddy"
+    directorio_configuracion_apache: "{{ directorio_repositorio_local }}/apache"
+    directorio_configuracion_nginx: "{{ directorio_repositorio_local }}/nginx"
+    directorio_claves: "/home/ubuntu/Proyecto/nube/proxy/.ssh"
+    
+    # Variables de sistemas y servicios
+    ruta_destino_caddy: "/etc/caddy"
+    ruta_destino_apache: "/etc/apache2"
+    ruta_destino_nginx: "/etc/nginx"
+    ruta_destino_proyecto: "/home/ubuntu/Proyecto"
+    
+    # URL del repositorio
+    url_repositorio: "https://AsierRodriguezO@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:github.com/AliciaSP2004/Proyecto.git"
+    
+    # Directorios de playbooks internos
+    ruta_playbook_apaches: "/home/usuario/Proyecto/nube/ansible/Apaches/setup_web.yml"
+    ruta_playbook_monitores: "/home/usuario/Proyecto/nube/ansible/MonitoreoBd/mariadb.yml"
+    
+  tasks:
+    # ========================================================================
+    # 1. ACTUALIZACIÓN DEL SISTEMA
+    # ========================================================================
+    - name: "PASO 1: Actualizar lista de paquetes del sistema"
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: "PASO 1: Actualizar todos los paquetes del sistema"
+      apt:
+        upgrade: dist
+        force_apt_get: yes
+
+    - name: "PASO 1: Instalar paquetes esenciales"
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - net-tools
+          - vim
+          - htop
+        state: present
+
+    # ========================================================================
+    # 2. CONFIGURACIÓN DE PUERTA DE ENLACE (FORWARDING)
+    # ========================================================================
+    - name: "PASO 2: Habilitar IP forwarding en kernel (sysctl)"
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    - name: "PASO 2: Configurar iptables para NAT en forwarding"
+      iptables:
+        table: nat
+        chain: POSTROUTING
+        out_interface: eth0 ## Cambiar a la interfaz de salida correcta si es necesario
+        jump: MASQUERADE
+        comment: "Configuración NAT para puerta de enlace"
+
+    - name: "PASO 2: Guardar configuración de iptables"
+      shell: |
+        iptables-save > /etc/iptables/rules.v4
+      args:
+        creates: /etc/iptables/rules.v4
+
+    - name: "PASO 2: Instalar iptables-persistent para persistencia"
+      apt:
+        name: iptables-persistent
+        state: present
+
+    # ========================================================================
+    # 3. INSTALACIÓN DE SERVICIOS (APACHE, NGINX, CADDY)
+    # ========================================================================
+    - name: "PASO 3: Instalar Apache2"
+      apt:
+        name: apache2
+        state: present
+
+    - name: "PASO 3: Instalar Nginx"
+      apt:
+        name: nginx
+        state: present
+
+    - name: "PASO 3: Instalar Caddy"
+      apt:
+        name: caddy
+        state: present
+
+    # ========================================================================
+    # 4. COPIA DE ARCHIVOS DE CONFIGURACIÓN
+    # ========================================================================
+    - name: "PASO 4: Copiar configuración de Caddy"
+      copy:
+        src: "{{ directorio_configuracion_caddy }}/"
+        dest: "{{ ruta_destino_caddy }}/"
+        owner: caddy
+        group: caddy
+        mode: '0755'
+        force: yes
+
+    - name: "PASO 4: Copiar configuración de Apache"
+      copy:
+        src: "{{ directorio_configuracion_apache }}/Configuracion.conf"
+        dest: "{{ ruta_destino_apache }}/sites-available/000-default.conf"
+        owner: root
+        group: root
+        mode: '0644'
+        force: yes
+
+    - name: "PASO 4: Copiar configuración de Nginx"
+      copy:
+        src: "{{ directorio_configuracion_nginx }}/default"
+        dest: "{{ ruta_destino_nginx }}/sites-available/default"
+        owner: root
+        group: root
+        mode: '0644'
+        force: yes
+
+    # ========================================================================
+    # 5. CLONAR REPOSITORIO DEL PROYECTO
+    # ========================================================================
+    - name: "PASO 5: Clonar repositorio del proyecto desde GitHub"
+      git:
+        repo: "{{ url_repositorio }}"
+        dest: "{{ ruta_destino_proyecto }}"
+        version: main
+        force: yes
+      become_user: ubuntu
+
+    # ========================================================================
+    # 6. COPIA DE CLAVES DEL LABORATORIO
+    # ========================================================================
+    - name: "PASO 6: Crear directorio de claves SSH"
+      file:
+        path: "/home/ubuntu/.ssh"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0700'
+
+    - name: "PASO 6: Copiar claves SSH del laboratorio"
+      copy:
+        src: "{{ directorio_claves }}/"
+        dest: "/home/ubuntu/.ssh/"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+        force: yes
+
+    - name: "PASO 6: Establecer permisos correctos en directorio SSH"
+      file:
+        path: "/home/ubuntu/.ssh"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0700'
+        recurse: yes
+
+    # ========================================================================
+    # 7. DESACTIVACIÓN DE APACHE Y NGINX - ACTIVACIÓN DE CADDY
+    # ========================================================================
+    - name: "PASO 7: Detener servicio Apache"
+      systemd:
+        name: apache2
+        state: stopped
+        enabled: no
+
+    - name: "PASO 7: Detener servicio Nginx"
+      systemd:
+        name: nginx
+        state: stopped
+        enabled: no
+
+    - name: "PASO 7: Recargar y activar Caddy"
+      systemd:
+        name: caddy
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+    - name: "PASO 7: Verificar que Caddy está activo"
+      systemd:
+        name: caddy
+        state: started
+        enabled: yes
+
+    # ========================================================================
+    # 8. INSTALACIÓN DE ANSIBLE
+    # ========================================================================
+    - name: "PASO 8: Actualizar índice de paquetes de Ansible PPA"
+      apt:
+        update_cache: yes
+
+    - name: "PASO 8: Instalar Ansible"
+      apt:
+        name: ansible
+        state: present
+
+    - name: "PASO 8: Verificar instalación de Ansible"
+      command: ansible --version
+      register: resultado_ansible
+
+    - name: "PASO 8: Mostrar versión de Ansible"
+      debug:
+        msg: "{{ resultado_ansible.stdout_lines }}"
+
+    # ========================================================================
+    # 9. EJECUCIÓN DE PLAYBOOKS INTERNOS
+    # ========================================================================
+    - name: "PASO 9: Ejecutar playbook de Apache para máquinas internas"
+      command: |
+        ansible-playbook {{ ruta_playbook_apaches }} 
+        -i {{ playbook_dir }}/host.ini
+      register: resultado_playbook_apache
+      ignore_errors: yes
+
+    - name: "PASO 9: Mostrar resultado playbook Apache"
+      debug:
+        msg: "{{ resultado_playbook_apache.stdout_lines }}"
+
+    - name: "PASO 9: Ejecutar playbook de Monitoreo BD para máquinas internas"
+      command: |
+        ansible-playbook {{ ruta_playbook_monitores }}
+        -i {{ playbook_dir }}/host.ini
+      register: resultado_playbook_monitores
+      ignore_errors: yes
+
+    - name: "PASO 9: Mostrar resultado playbook Monitoreo"
+      debug:
+        msg: "{{ resultado_playbook_monitores.stdout_lines }}"
+
+    # ========================================================================
+    # TAREAS FINALES DE VALIDACIÓN
+    # ========================================================================
+    - name: "VALIDACIÓN: Verificar estado del servicio Caddy"
+      systemd:
+        name: caddy
+        state: started
+      check_mode: yes
+      register: estado_caddy
+
+    - name: "VALIDACIÓN: Mostrar estado de Caddy"
+      debug:
+        msg: "Caddy está {{ 'ACTIVO' if estado_caddy.changed == false else 'INACTIVO' }}"
+
+    - name: "VALIDACIÓN: Verificar IP forwarding"
+      command: sysctl net.ipv4.ip_forward
+      register: ip_forward_status
+
+    - name: "VALIDACIÓN: Mostrar estado de IP forwarding"
+      debug:
+        msg: "{{ ip_forward_status.stdout }}"
+
+    - name: "VALIDACIÓN: Verificar conexión de red"
+      command: netstat -rn
+      register: tabla_rutas
+
+    - name: "VALIDACIÓN: Mostrar tabla de rutas"
+      debug:
+        msg: "{{ tabla_rutas.stdout_lines }}"
+
+    # ========================================================================
+    # RESUMEN FINAL
+    # ========================================================================
+    - name: "RESUMEN: Mostrar resumen de la configuración"
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════╗
+          ║         CONFIGURACIÓN COMPLETADA CON ÉXITO                 ║
+          ╠════════════════════════════════════════════════════════════╣
+          ║ ✓ Sistema actualizado                                      ║
+          ║ ✓ Puerta de enlace configurada (IP forwarding habilitado)  ║
+          ║ ✓ Apache, Nginx y Caddy instalados                        ║
+          ║ ✓ Configuraciones copiadas                                ║
+          ║ ✓ Repositorio clonado                                     ║
+          ║ ✓ Claves SSH del laboratorio copiadas                     ║
+          ║ ✓ Solo Caddy activo (Apache y Nginx desactivados)         ║
+          ║ ✓ Ansible instalado                                       ║
+          ║ ✓ Playbooks internos ejecutados                           ║
+          ╚════════════════════════════════════════════════════════════╝
+          
+          Dirección IP de la máquina: {{ ansible_default_ipv4.address }}
+          Usuario: ubuntu
+          Repositorio clonado en: {{ ruta_destino_proyecto }}
+
