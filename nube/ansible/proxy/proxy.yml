@@ -69,6 +69,11 @@
     # ========================================================================
     # 2. CONFIGURACIÓN DE PUERTA DE ENLACE (FORWARDING)
     # ========================================================================
+    - name: "PASO 2: Instalar iptables-persistent para persistencia"
+      apt:
+        name: iptables-persistent
+        state: present
+
     - name: "PASO 2: Habilitar IP forwarding en kernel (sysctl)"
       sysctl:
         name: net.ipv4.ip_forward
@@ -77,26 +82,45 @@
         state: present
         reload: yes
 
+    - name: "PASO 2: Permitir trafico forward por defecto"
+      shell: |
+        iptables -P FORWARD ACCEPT
+      become: yes
+
+    - name: "PASO 2: Obtener nombre de interfaz de red principal"
+      shell: |
+        ip route get 8.8.8.8 | grep -oP '(?<=dev\s)\w+' | head -1
+      register: interfaz_salida
+      changed_when: false
+
+    - name: "PASO 2: Configurar rules de iptables para NAT y forwarding"
+      shell: |
+        iptables -t nat -A POSTROUTING -o {{ interfaz_salida.stdout }} -j MASQUERADE
+        iptables -A FORWARD -i eth0 -o {{ interfaz_salida.stdout }} -j ACCEPT
+        iptables -A FORWARD -i {{ interfaz_salida.stdout }} -o eth0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+        iptables -A FORWARD -i eth1 -o {{ interfaz_salida.stdout }} -j ACCEPT
+        iptables -A FORWARD -i {{ interfaz_salida.stdout }} -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+      become: yes
+      ignore_errors: yes
+
     - name: "PASO 2: Crear directorio de iptables si no existe"
       file:
         path: /etc/iptables
         state: directory
         mode: '0755'
 
-    - name: "PASO 2: Configurar iptables para NAT en forwarding"
-      shell: |
-        sudo iptables -t nat -A POSTROUTING -o ens5 -j MASQUERADE
-      become: yes
-
     - name: "PASO 2: Guardar configuración de iptables"
       shell: |
         iptables-save > /etc/iptables/rules.v4
       become: yes
 
-    - name: "PASO 2: Instalar iptables-persistent para persistencia"
-      apt:
-        name: iptables-persistent
-        state: present
+    - name: "PASO 2: Cargar reglas de iptables al inicio del sistema"
+      shell: |
+        mkdir -p /etc/iptables
+        iptables-save > /etc/iptables/rules.v4
+        systemctl enable netfilter-persistent
+      become: yes
+      ignore_errors: yes
 
     # ========================================================================
     # 3. INSTALACIÓN DE SERVICIOS (APACHE, NGINX, CADDY)
