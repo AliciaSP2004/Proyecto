@@ -152,6 +152,11 @@
         mode: '0755'
         force: yes
 
+    - name: "PASO 4: Generar Caddyfile desde configuración http"
+      shell: |
+        cat /etc/caddy/http > /etc/caddy/Caddyfile
+      become: yes
+
     - name: "PASO 4: Copiar configuración de Apache"
       copy:
         src: "{{ directorio_configuracion_apache }}/Configuracion.conf"
