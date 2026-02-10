@@ -32,14 +32,14 @@
     ruta_destino_caddy: "/etc/caddy"
     ruta_destino_apache: "/etc/apache2"
     ruta_destino_nginx: "/etc/nginx"
-    ruta_destino_proyecto: "/home/ubuntu/Proyecto"
+    ruta_destino_proyecto: "/home/ubuntu"
     
     # URL del repositorio
     url_repositorio: "https://AsierRodriguezO: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@github.com/AliciaSP2004/Proyecto.git"
     
     # Directorios de playbooks internos
-    ruta_playbook_apaches: "/home/usuario/Proyecto/nube/ansible/Apaches/setup_web.yml"
-    ruta_playbook_monitores: "/home/usuario/Proyecto/nube/ansible/MonitoreoBd/mariadb.yml"
+    ruta_playbook_apaches: "/home/ubuntu/Proyecto/nube/ansible/Apaches/setup_web.yml"
+    ruta_playbook_monitores: "/home/ubuntu/Proyecto/nube/ansible/MonitoreoBd/mariadb.yml"
     
   tasks:
     # ========================================================================
@@ -149,12 +149,29 @@
     # ========================================================================
     # 5. CLONAR REPOSITORIO DEL PROYECTO
     # ========================================================================
+    - name: "PASO 5: Crear directorio padre para el proyecto"
+      file:
+        path: "/home/ubuntu"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: "PASO 5: Eliminar repositorio existente si hay conflicto de permisos"
+      file:
+        path: "{{ ruta_destino_proyecto }}"
+        state: absent
+      ignore_errors: yes
+
     - name: "PASO 5: Clonar repositorio del proyecto desde GitHub"
       git:
         repo: "{{ url_repositorio }}"
         dest: "{{ ruta_destino_proyecto }}"
         version: main
         force: yes
+      environment:
+        GIT_TERMINAL_PROMPT: "0"
+      become: yes
       become_user: ubuntu
 
     # ========================================================================
