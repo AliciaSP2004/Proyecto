@@ -3,7 +3,7 @@
   hosts: aws
   become: yes
   vars:
-    repo_github: "https://github.com/AliciaSP2004/Proyecto.git"
+    repo_github: "https://AsierRodriguezO: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@github.com/AliciaSP2004/Proyecto.git"
     directorio_repo: "/home/ubuntu"
     directorio_compose: "/home/ubuntu/Proyecto/IAW/docker"
 

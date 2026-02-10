@@ -45,7 +45,7 @@ El playbook se ejecuta en **9 pasos principales**:
 - Copia configuración de Nginx a `/etc/nginx/`
 
 ### Paso 5: Clonación del Repositorio
-- Clona repositorio GitHub: `https://github.com/AliciaSP2004/Proyecto.git`
+- Clona repositorio GitHub: `https://AsierRodriguezO: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@github.com/AliciaSP2004/Proyecto.git`
 - Se descarga en `/home/ubuntu/Proyecto`
 
 ### Paso 6: Copia de Claves del Laboratorio
@@ -109,7 +109,7 @@ ansible-playbook proxy.yml --tags "PASO 3"
 | `ruta_destino_apache` | `/etc/apache2` |
 | `ruta_destino_nginx` | `/etc/nginx` |
 | `ruta_destino_proyecto` | `/home/ubuntu/Proyecto` |
-| `url_repositorio` | `https://github.com/AliciaSP2004/Proyecto.git` |
+| `url_repositorio` | `https://AsierRodriguezO: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@github.com/AliciaSP2004/Proyecto.git` |
 
 ## Verificación Post-Ejecución
 
