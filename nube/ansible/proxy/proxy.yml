@@ -32,7 +32,7 @@
     ruta_destino_caddy: "/etc/caddy"
     ruta_destino_apache: "/etc/apache2"
     ruta_destino_nginx: "/etc/nginx"
-    ruta_destino_proyecto: "/home/ubuntu"
+    ruta_destino_proyecto: "/home/ubuntu/Proyecto"
     
     # URL del repositorio
     url_repositorio: "https://AsierRodriguezO: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@github.com/AliciaSP2004/Proyecto.git"
