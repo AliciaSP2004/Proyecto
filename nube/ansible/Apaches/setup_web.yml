@@ -16,22 +16,16 @@
       - python3
       - mariadb-client
       - apache2
+      - apache2-utils
+      - wget
 
   tasks:
-    - name: Actualizar caché APT
-      apt:
-        update_cache: yes
-        cache_valid_time: 3600
-
-    - name: Actualizar paquetes instalados
-      apt:
-        upgrade: dist
-
     - name: Instalar paquetes necesarios
       apt:
         name: "{{ packages }}"
         state: present
         update_cache: yes
+        cache_valid_time: 3600
 
     - name: Crear carpeta de scripts remotos
       file:
@@ -99,6 +93,64 @@
         minute: "*/5"
         user: root
         job: "{{ remote_script_path }} >/dev/null 2>&1"
+
+    - name: Activar módulo auth_basic de Apache
+      apache2_module:
+        name: auth_basic
+        state: present
+      notify: Reiniciar Apache
+
+    - name: Crear archivo .htpasswd con usuario1
+      htpasswd:
+        path: /etc/apache2/.htpasswd
+        name: usuario1
+        password: usuario@1
+        owner: root
+        group: www-data
+        mode: '0640'
+
+    - name: Agregar usuario2 al archivo .htpasswd
+      htpasswd:
+        path: /etc/apache2/.htpasswd
+        name: usuario2
+        password: usuario@1
+        owner: root
+        group: www-data
+        mode: '0640'
+
+    - name: Crear directorio para WordPress
+      file:
+        path: /var/www/html/wordpress
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Descargar la última versión de WordPress
+      get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/wordpress.tar.gz
+      register: wordpress_download
+
+    - name: Extraer WordPress en el directorio
+      unarchive:
+        src: /tmp/wordpress.tar.gz
+        dest: /var/www/html/
+        owner: www-data
+        group: www-data
+        remote_src: yes
+
+    - name: Renombrar carpeta wordpress si es necesario
+      command: mv /var/www/html/wordpress /var/www/html/wordpress_temp && mv /var/www/html/wordpress_temp /var/www/html/wordpress
+      ignore_errors: yes
+
+    - name: Establecer permisos correctos en archivos de WordPress
+      file:
+        path: /var/www/html/wordpress
+        owner: www-data
+        group: www-data
+        mode: '0755'
+        recurse: yes
 
   handlers:
     - name: Reiniciar Apache
