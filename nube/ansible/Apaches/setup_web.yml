@@ -148,10 +148,6 @@
         group: www-data
         remote_src: yes
 
-    - name: Renombrar carpeta wordpress si es necesario
-      command: mv /var/www/html/wordpress /var/www/html/wordpress_temp && mv /var/www/html/wordpress_temp /var/www/html/wordpress
-      ignore_errors: yes
-
     - name: Establecer permisos correctos en archivos de WordPress
       file:
         path: /var/www/html/wordpress
