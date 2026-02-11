@@ -156,14 +156,6 @@ resource "aws_security_group" "privado_sg" {
     security_groups = [aws_security_group.proxy_sg.id]
   }
 
-  ingress {
-    description     = "SSH desde monitorización"
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.moni_sg.id]
-  }
-
   egress {
     description = "Salida libre"
     from_port   = 0
@@ -214,23 +206,6 @@ resource "aws_security_group" "bd_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.proxy_sg.id]
   }
-
-  ingress {
-    description     = "SSH desde monitorización"
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.moni_sg.id]
-  }
-
-  ingress {
-    description     = "MySQL desde www1 y www2"
-    from_port       = 3306
-    to_port         = 3306
-    protocol        = "tcp"
-    security_groups = [aws_security_group.privado_sg.id]
-  }
-
   egress {
     description = "Salida libre"
     from_port   = 0
