@@ -13,6 +13,7 @@
     remote_config_path: "/etc/apache2/sites-available/ConfFinal.conf"
     directorio_claves: "/home/usuario/Proyecto/nube/ansible/proxy/.ssh"
     directorio_repo: "/home/ubuntu"
+    repo_github: "https://github.com/AliciaSP2004/Proyecto.git"
     packages:
       - php
       - python3
@@ -115,15 +116,17 @@
         path: /etc/apache2/.htpasswd
         name: usuario1
         password: usuario@1
-        owner: root
-        group: www-data
-        mode: '0640'
+    # No incluir owner/group/mode aquí
 
     - name: Agregar usuario2 al archivo .htpasswd
       htpasswd:
         path: /etc/apache2/.htpasswd
         name: usuario2
         password: usuario@1
+
+    - name: Ajustar permisos del archivo .htpasswd
+      file:
+        path: /etc/apache2/.htpasswd
         owner: root
         group: www-data
         mode: '0640'
