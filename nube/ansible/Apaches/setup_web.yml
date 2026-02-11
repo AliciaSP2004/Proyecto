@@ -112,11 +112,11 @@
       notify: Reiniciar Apache
 
     - name: Crear archivo .htpasswd con usuario1
-      shell: htpasswd -c /etc/apache2/.htpasswd usuario1 usuario@1
+      shell: htpasswd -cb /etc/apache2/.htpasswd usuario1 usuario@1
     # No incluir owner/group/mode aquí
 
     - name: Crear archivo .htpasswd con usuario2
-      shell: htpasswd  /etc/apache2/.htpasswd usuario2 usuario@2
+      shell: htpasswd -b /etc/apache2/.htpasswd usuario2 usuario@2
     # No incluir owner/group/mode aquí
 
     - name: Ajustar permisos del archivo .htpasswd
