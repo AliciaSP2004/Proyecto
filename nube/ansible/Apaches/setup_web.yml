@@ -158,12 +158,8 @@
         recurse: yes
     
     - name: copiar wp-config.php
-      copy:
-        src: "{{ directorio_repo }}/Proyecto/Paginaweb/wp-config.php"
-        dest: /var/www/html/wordpress/wp-config.php
-        owner: www-data
-        group: www-data
-        mode: '0644'
+      shell: sudo cp /home/ubuntu/Proyecto/SRI/Paginaweb/wp-config.php /var/www/html/wordpress/wp-config.php
+       
 
   handlers:
     - name: Reiniciar Apache
