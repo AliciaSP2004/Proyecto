@@ -160,6 +160,9 @@
     - name: copiar wp-config.php
       copy:
         shell: cp /home/ubuntu/Proyecto/SRI/Paginaweb/wp-config.php /var/www/html/wordpress/wp-config.php
+        owner: www-data
+        group: www-data
+        mode: '0644'
 
   handlers:
     - name: Reiniciar Apache
