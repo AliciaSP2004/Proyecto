@@ -35,7 +35,7 @@
     ruta_destino_proyecto: "/home/ubuntu/Proyecto"
     
     # URL del repositorio
-    url_repositorio: "https://AsierRodriguezO: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@github.com/AliciaSP2004/Proyecto.git"
+    url_repositorio: "https://github.com/AliciaSP2004/Proyecto.git"
     
     # Directorios de playbooks internos
     ruta_playbook_apaches: "/home/ubuntu/Proyecto/nube/ansible/Apaches/setup_web.yml"

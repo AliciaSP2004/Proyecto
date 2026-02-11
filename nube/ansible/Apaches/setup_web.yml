@@ -11,6 +11,8 @@
     private_index_src: "/home/ubuntu/Proyecto/SRI/Paginaweb/PaginaPrivada/index.html"
     remote_privado_dir: "/var/www/mipagina"
     remote_config_path: "/etc/apache2/sites-available/ConfFinal.conf"
+    directorio_claves: "/home/usuario/Proyecto/nube/ansible/proxy/.ssh"
+    directorio_repo: "/home/ubuntu"
     packages:
       - php
       - python3
@@ -26,6 +28,14 @@
         state: present
         update_cache: yes
         cache_valid_time: 3600
+
+    - name: Descargar repositorio de GitHub
+      git:
+        repo: "{{ repo_github }}"
+        dest: "{{ directorio_repo }}/Proyecto"
+        version: main
+        force: yes
+      ignore_errors: yes
 
     - name: Crear carpeta de scripts remotos
       file:
