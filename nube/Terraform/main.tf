@@ -206,6 +206,14 @@ resource "aws_security_group" "bd_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.proxy_sg.id]
   }
+ ingress {
+    description     = "3306 desde proxy"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [0.0.0.0/0]
+  }
+
   egress {
     description = "Salida libre"
     from_port   = 0
