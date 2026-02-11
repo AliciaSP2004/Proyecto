@@ -156,6 +156,14 @@
         group: www-data
         mode: '0755'
         recurse: yes
+    
+    - name: copiar wp-config.php
+      copy:
+        src: "{{ directorio_repo }}/Proyecto/IAW/wordpress/wp-config.php"
+        dest: /var/www/html/wordpress/wp-config.php
+        owner: www-data
+        group: www-data
+        mode: '0644'
 
   handlers:
     - name: Reiniciar Apache

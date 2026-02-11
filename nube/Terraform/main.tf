@@ -8,8 +8,6 @@ resource "aws_vpc" "vpc" {
 }
 
 
-
-
 # Subredes
 resource "aws_subnet" "publica" {
   vpc_id                  = aws_vpc.vpc.id
