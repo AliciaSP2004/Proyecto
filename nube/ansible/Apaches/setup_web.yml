@@ -21,6 +21,7 @@
       - apache2
       - apache2-utils
       - wget
+      - php-mysqli
 
   tasks:
     - name: Instalar paquetes necesarios
