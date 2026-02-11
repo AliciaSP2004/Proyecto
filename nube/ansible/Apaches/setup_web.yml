@@ -158,7 +158,7 @@
         recurse: yes
     
     - name: copiar wp-config.php
-      shell: sudo cp /home/ubuntu/Proyecto/IAW/wordpress/wp-config.php /var/www/html/wordpress/wp-config.php
+      shell: sudo cp /home/ubuntu/Proyecto/IAW/wordpress/wp_config.php /var/www/html/wordpress/wp-config.php
        
 
   handlers:
