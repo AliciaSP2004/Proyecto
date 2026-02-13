@@ -39,8 +39,8 @@ UMBRALES = {
 
 # Lista de servidores remotos a monitorizar
 SERVIDORES = [
-    {"nombre": "Servidor1", "ip": "10.0.2.31", "usuario": "ubuntu", "clave_privada": "/home/ubuntu/Proyecto/nube/ansible/Apaches/.ssh/ansible.pem"},
-    {"nombre": "Servidor2", "ip": "10.0.2.106", "usuario": "ubuntu", "clave_privada": "/home/ubuntu/Proyecto/nube/ansible/Apaches/.ssh/ansible.pem"},
+    {"nombre": "Servidor (10.0.2.31)", "ip": "10.0.2.31", "usuario": "ubuntu", "clave_privada": "/home/ubuntu/Proyecto/nube/ansible/Apaches/.ssh/ansible.pem"},
+    {"nombre": "Servidor (10.0.2.106)", "ip": "10.0.2.106", "usuario": "ubuntu", "clave_privada": "/home/ubuntu/Proyecto/nube/ansible/Apaches/.ssh/ansible.pem"},
 ]
 
 PUERTO_WEB = 80
@@ -59,16 +59,16 @@ def registrar_accion_manual(accion, resultado):
         f.write(linea)
     print(f"   📌 Acción registrada: {resultado}")
 
-def ejecutar_comando_sudo(comando, servicio_nombre=""):
-    """Ejecuta comando con sudo y captura éxito/error."""
-    try:
-        subprocess.run(["sudo"] + comando, check=True, capture_output=True)
-        resultado = f"{servicio_nombre or 'Servicio'} ejecutado correctamente"
-        return True, resultado
-    except subprocess.CalledProcessError as e:
-        err = e.stderr.decode().strip() if e.stderr else "Error desconocido"
-        resultado = f"Error al ejecutar {' '.join(comando)}: {err}"
-        return False, resultado
+def ejecutar_comando_sudo_remoto(ssh, comando, servicio_nombre=""):
+    """Ejecuta comando con sudo y siempre devuelve mensaje claro."""
+    cmd = f"sudo -n {comando}"
+    resultado = ejecutar_comando_remoto(ssh, cmd)
+    exito = "Error" not in resultado
+    if exito and not resultado.strip():
+        resultado = f"✅ {servicio_nombre} ejecutado correctamente"
+    elif not exito:
+        resultado = f"❌ {resultado}"
+    return exito, resultado
 
 def conectar_ssh(servidor):
     try:
@@ -88,16 +88,6 @@ def ejecutar_comando_remoto(ssh, comando):
         return salida if not error else f"Error: {error}"
     except Exception as e:
         return f"Error ejecución remota: {e}"
-
-def ejecutar_comando_sudo_remoto(ssh, comando, servicio_nombre=""):
-    cmd = f"sudo -n {comando}"
-    resultado = ejecutar_comando_remoto(ssh, cmd)
-    if "Error" in resultado or "error" in resultado:
-        exito = False
-    else:
-        exito = True
-        resultado = f"{servicio_nombre} ejecutado correctamente" if not resultado else resultado
-    return exito, resultado
 
 # ==============================================================================
 # FUNCIONES DE CHECK
@@ -159,7 +149,7 @@ def check_recursos_sistema_remoto(ssh):
     except Exception as e:
         return "CRIT", f"Error recursos: {e}"
 
-def obtener_info_sistema():
+def obtener_info_sistema_local():
     hostname = platform.node()
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -167,6 +157,11 @@ def obtener_info_sistema():
             ip = s.getsockname()[0]
     except Exception:
         ip = "127.0.0.1"
+    return hostname, ip
+
+def obtener_info_sistema_remoto(ssh):
+    hostname = ejecutar_comando_remoto(ssh, "hostname")
+    ip = ejecutar_comando_remoto(ssh, "hostname -I | awk '{print $1}'")
     return hostname, ip
 
 # ==============================================================================
@@ -177,6 +172,8 @@ def monitorizar_servidor(servidor, modo_auto=False, checks_selectivos=None):
     ssh = conectar_ssh(servidor)
     if not ssh:
         return {"estado_global": "CRIT", "checks": {"ssh": {"estado": "CRIT", "detalles": "Conexión SSH fallida"}}}
+
+    hostname_remoto, ip_remoto = obtener_info_sistema_remoto(ssh)
 
     checks = {}
     estados = []
@@ -214,7 +211,9 @@ def monitorizar_servidor(servidor, modo_auto=False, checks_selectivos=None):
     guardar_resultado({
         "checks": checks,
         "estado_global": estado_global,
-        "servidor": servidor["nombre"]
+        "servidor": servidor["nombre"],
+        "hostname_remoto": hostname_remoto,
+        "ip_remoto": ip_remoto
     }, modo_auto=modo_auto)
 
     ssh.close()
@@ -229,7 +228,7 @@ def crear_ruta_salida(fecha_hoy):
 def guardar_resultado(resultado, modo_auto=False):
     ahora = datetime.datetime.now()
     fecha_iso = ahora.isoformat()
-    hostname, ip = obtener_info_sistema()
+    hostname_local, ip_local = obtener_info_sistema_local()
     fecha_hoy = ahora.strftime("%Y-%m-%d")
     timestamp = ahora.strftime("%Y%m%d_%H%M%S")
     sufijo = {"CRIT": "CRIT", "WARN": "WARN"}.get(resultado["estado_global"], "OK")
@@ -243,8 +242,10 @@ def guardar_resultado(resultado, modo_auto=False):
 
     datos_json = {
         "fecha_hora": fecha_iso,
-        "hostname": hostname,
-        "ip": ip,
+        "hostname_local": hostname_local,
+        "ip_local": ip_local,
+        "hostname_servidor": resultado["hostname_remoto"],
+        "ip_servidor": resultado["ip_remoto"],
         "modo": "automatico" if modo_auto else "manual",
         "checks": resultado["checks"],
         "estado_global": resultado["estado_global"]
@@ -257,8 +258,8 @@ def guardar_resultado(resultado, modo_auto=False):
         "=" * 70,
         "MONITORIZACIÓN DE SERVICIOS WEB Y CRÍTICOS",
         "=" * 70,
-        "Fecha/hora: " + fecha_iso,
-        f"Host: {hostname} ({ip})",
+        f"Fecha/hora: {fecha_iso}",
+        f"Host: {resultado["hostname_remoto"]} ({resultado["ip_remoto"]})",
         f"Modo: {'Automático' if modo_auto else 'Manual'}",
         f"Estado global: {resultado['estado_global']}",
         "-" * 70,
@@ -274,7 +275,7 @@ def guardar_resultado(resultado, modo_auto=False):
     print(f"📊 JSON en: {json_path}\n")
 
 # ==============================================================================
-# MENÚ INTERACTIVO
+# MENÚ INTERACTIVO (SOLO SE MODIFICÓ LA OPCIÓN 3 y 5)
 # ==============================================================================
 
 def menu_interactivo():
@@ -286,8 +287,8 @@ def menu_interactivo():
         print("\nOpciones:")
         print("1. Comprobar conexión SSH")
         print("2. Monitorización selectiva")
-        print("3. Arrancar servicio web")
-        print("4. Parar servicio web")
+        print("3. Iniciar Nginx y verificar estado")
+        print("4. Detener Nginx y verificar estado")
         print("5. Reiniciar servicio web")
         print("6. Monitorizar servicios críticos")
         print("7. Ver uso de recursos")
@@ -307,13 +308,20 @@ def menu_interactivo():
             print("\nSelecciona servidor:")
             for i, srv in enumerate(SERVIDORES, 1):
                 print(f"{i}. {srv['nombre']}")
-            sel_srv = int(input("Número: ")) - 1
-            servidor = SERVIDORES[sel_srv]
-            print("\nSelecciona checks (separados por coma, o 'todos'): servicios, puerto, http, recursos")
-            checks_input = input("Checks: ").strip()
-            checks_selectivos = None if checks_input.lower() == "todos" else [c.strip() for c in checks_input.split(",")]
-            monitorizar_servidor(servidor, modo_auto=False, checks_selectivos=checks_selectivos)
-        elif opcion in ["3", "4", "5", "6", "7", "8"]:
+            sel_srv = int(input("Número (0 para todos): ")) 
+            if sel_srv == 0:
+                for servidor in SERVIDORES:
+                    print("\nSelecciona checks para " + servidor['nombre'] + " (separados por coma, o 'todos'): servicios, puerto, http, recursos")
+                    checks_input = input("Checks: ").strip()
+                    checks_selectivos = None if checks_input.lower() == "todos" else [c.strip() for c in checks_input.split(",")]
+                    monitorizar_servidor(servidor, modo_auto=False, checks_selectivos=checks_selectivos)
+            else:
+                servidor = SERVIDORES[sel_srv - 1]
+                print("\nSelecciona checks (separados por coma, o 'todos'): servicios, puerto, http, recursos")
+                checks_input = input("Checks: ").strip()
+                checks_selectivos = None if checks_input.lower() == "todos" else [c.strip() for c in checks_input.split(",")]
+                monitorizar_servidor(servidor, modo_auto=False, checks_selectivos=checks_selectivos)
+        elif opcion == "4":
             print("\nSelecciona servidor:")
             for i, srv in enumerate(SERVIDORES, 1):
                 print(f"{i}. {srv['nombre']}")
@@ -323,22 +331,50 @@ def menu_interactivo():
                     ssh = conectar_ssh(servidor)
                     if not ssh:
                         continue
-                    if opcion in ["3", "4", "5"]:
-                        web_instalados = detectar_servicios_instalados_remoto(ssh, SERVICIOS_WEB)
-                        servicio_web = next(iter(web_instalados), None)
+                    exito, msg = ejecutar_comando_sudo_remoto(ssh, "systemctl stop nginx.service", "nginx.service")
+                    registrar_accion_manual(f"DETENER nginx.service en {servidor['nombre']}", msg)
+                    print(msg)
+                    _, estado, detalles = check_estado_servicio_remoto(ssh, "nginx.service")
+                    print(f"Estado de nginx.service en {servidor['nombre']}: {detalles}")
+                    ssh.close()
+            else:
+                servidor = SERVIDORES[sel_srv - 1]
+                ssh = conectar_ssh(servidor)
+                if not ssh:
+                    continue
+                exito, msg = ejecutar_comando_sudo_remoto(ssh, "systemctl stop nginx.service", "nginx.service")
+                registrar_accion_manual(f"DETENER nginx.service en {servidor['nombre']}", msg)
+                print(msg)
+                _, estado, detalles = check_estado_servicio_remoto(ssh, "nginx.service")
+                print(f"Estado de nginx.service en {servidor['nombre']}: {detalles}")
+                ssh.close()
+        elif opcion in ["3", "5", "6", "7", "8"]:
+            print("\nSelecciona servidor:")
+            for i, srv in enumerate(SERVIDORES, 1):
+                print(f"{i}. {srv['nombre']}")
+            sel_srv = int(input("Número (0 para todos): ")) 
+            if sel_srv == 0:
+                for servidor in SERVIDORES:
+                    ssh = conectar_ssh(servidor)
+                    if not ssh:
+                        continue
+                    if opcion in ["3", "5"]:
+                        if opcion == "3":
+                            servicio_web = "nginx.service"                     # ← FORZADO nginx
+                        else:
+                            web_instalados = detectar_servicios_instalados_remoto(ssh, SERVICIOS_WEB)
+                            servicio_web = next(iter(web_instalados), None)
                         if servicio_web:
                             if opcion == "3":
                                 exito, msg = ejecutar_comando_sudo_remoto(ssh, f"systemctl start {servicio_web}", servicio_web)
                                 registrar_accion_manual(f"ARRANCAR {servicio_web} en {servidor['nombre']}", msg)
-                                print(msg)
-                            elif opcion == "4":
-                                exito, msg = ejecutar_comando_sudo_remoto(ssh, f"systemctl stop {servicio_web}", servicio_web)
-                                registrar_accion_manual(f"PARAR {servicio_web} en {servidor['nombre']}", msg)
-                                print(msg)
                             elif opcion == "5":
                                 exito, msg = ejecutar_comando_sudo_remoto(ssh, f"systemctl restart {servicio_web}", servicio_web)
                                 registrar_accion_manual(f"REINICIAR {servicio_web} en {servidor['nombre']}", msg)
-                                print(msg)
+                            print(msg)
+                            # ← NUEVA VERIFICACIÓN DE ESTADO
+                            _, estado, detalles = check_estado_servicio_remoto(ssh, servicio_web)
+                            print(f"Estado de {servicio_web} en {servidor['nombre']}: {detalles}")
                     elif opcion == "6":
                         monitorizar_servidor(servidor, modo_auto=False)
                     elif opcion == "7":
@@ -357,25 +393,26 @@ def menu_interactivo():
                 ssh = conectar_ssh(servidor)
                 if not ssh:
                     continue
-                if opcion in ["3", "4", "5"]:
-                    web_instalados = detectar_servicios_instalados_remoto(ssh, SERVICIOS_WEB)
-                    servicio_web = next(iter(web_instalados), None)
+                if opcion in ["3", "5"]:
+                    if opcion == "3":
+                        servicio_web = "nginx.service"                     # ← FORZADO nginx
+                    else:
+                        web_instalados = detectar_servicios_instalados_remoto(ssh, SERVICIOS_WEB)
+                        servicio_web = next(iter(web_instalados), None)
                     if not servicio_web:
                         print("⚠️ No se detectó ningún servicio web (apache2/nginx) instalado.")
                         ssh.close()
                         continue
                     if opcion == "3":
                         exito, msg = ejecutar_comando_sudo_remoto(ssh, f"systemctl start {servicio_web}", servicio_web)
-                        registrar_accion_manual(f"ARRANCAR {servicio_web}", msg)
-                        print(msg)
-                    elif opcion == "4":
-                        exito, msg = ejecutar_comando_sudo_remoto(ssh, f"systemctl stop {servicio_web}", servicio_web)
-                        registrar_accion_manual(f"PARAR {servicio_web}", msg)
-                        print(msg)
+                        registrar_accion_manual(f"ARRANCAR {servicio_web} en {servidor['nombre']}", msg)   # ← corregido
                     elif opcion == "5":
                         exito, msg = ejecutar_comando_sudo_remoto(ssh, f"systemctl restart {servicio_web}", servicio_web)
-                        registrar_accion_manual(f"REINICIAR {servicio_web}", msg)
-                        print(msg)
+                        registrar_accion_manual(f"REINICIAR {servicio_web} en {servidor['nombre']}", msg)   # ← corregido
+                    print(msg)
+                    # ← NUEVA VERIFICACIÓN DE ESTADO
+                    _, estado, detalles = check_estado_servicio_remoto(ssh, servicio_web)
+                    print(f"Estado de {servicio_web} en {servidor['nombre']}: {detalles}")
                 elif opcion == "6":
                     monitorizar_servidor(servidor, modo_auto=False)
                 elif opcion == "7":
