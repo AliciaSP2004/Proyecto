@@ -280,6 +280,20 @@
         msg: "{{ resultado_ansible.stdout_lines }}"
 
     # ========================================================================
+    # 8.5. CONFIGURACIÓN DE PERMISOS DE CLAVES SSH
+    # ========================================================================
+    - name: "PASO 8.5: Navegar a .ssh y establecer permisos 600 a prueba.pem"
+      shell: |
+        cd /home/ubuntu/.ssh && chmod 600 prueba.pem && ls -la prueba.pem
+      register: resultado_permisos_ssh
+      become: yes
+      become_user: ubuntu
+
+    - name: "PASO 8.5: Mostrar resultado de permisos SSH"
+      debug:
+        msg: "{{ resultado_permisos_ssh.stdout_lines }}"
+
+    # ========================================================================
     # 9. EJECUCIÓN DE PLAYBOOKS INTERNOS
     # ========================================================================
     - name: "PASO 9: Ejecutar playbook de Apache para máquinas internas"
