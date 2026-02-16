@@ -107,6 +107,15 @@ resource "aws_security_group" "proxy_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  ingress {
+    description = "Puerto 8080 desde Internet"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   ingress {
     description = "Trafico desde la subred privada para NAT"
     from_port   = 0
@@ -209,7 +218,7 @@ resource "aws_security_group" "bd_sg" {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [0.0.0.0/0]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
