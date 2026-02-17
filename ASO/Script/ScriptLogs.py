@@ -5,6 +5,13 @@ Cumple completamente con los requisitos del proyecto intermodular ASO.
 Incluye monitorización de servicio web y servicios críticos adicionales.
 """
 
+# Comentarios generales:
+# - Este módulo ofrece checks remotos (vía SSH) y locales para monitorizar servicios web
+#   y componentes críticos (BD, cache, sistema). También permite acciones manuales
+#   (start/stop/restart) y guarda informes tanto en texto legible como en JSON.
+# - Las funciones están organizadas en: configuración, auxiliares (SSH/IO), checks,
+#   orquestador/guardado y una UI simple por menú para uso interactivo.
+
 import sys
 import subprocess
 import datetime
@@ -20,6 +27,9 @@ import paramiko
 # ==============================================================================
 # CONFIGURACIÓN
 # ==============================================================================
+# Sección de configuración: constantes y listas que definen qué comprobar,
+# umbrales y servidores a monitorizar. Centralizar la configuración facilita
+# adaptar el script a distintos entornos sin tocar la lógica.
 BASE_DIR = "monitorizacion"
 
 # Servicios a monitorizar
@@ -51,6 +61,8 @@ LOG_ACCIONES_MANUAL = os.path.join(BASE_DIR, "acciones_manuales.log")
 # ==============================================================================
 
 def registrar_accion_manual(accion, resultado):
+    # Propósito: almacenar un histórico de acciones manuales (arrancar/detener/reiniciar)
+    # Por qué: auditoría y trazabilidad de operaciones realizadas desde el menú.
     """Registra acciones manuales en un log acumulado."""
     os.makedirs(BASE_DIR, exist_ok=True)
     ahora = datetime.datetime.now().isoformat()
@@ -60,6 +72,8 @@ def registrar_accion_manual(accion, resultado):
     print(f"   📌 Acción registrada: {resultado}")
 
 def ejecutar_comando_sudo_remoto(ssh, comando, servicio_nombre=""):
+    # Propósito: ejecutar comandos que requieren privilegios remotos sin interacción.
+    # Por qué: usar `sudo -n` evita prompts de contraseña que romperían la automatización.
     """Ejecuta comando con sudo y siempre devuelve mensaje claro."""
     cmd = f"sudo -n {comando}"
     resultado = ejecutar_comando_remoto(ssh, cmd)
@@ -71,6 +85,8 @@ def ejecutar_comando_sudo_remoto(ssh, comando, servicio_nombre=""):
     return exito, resultado
 
 def conectar_ssh(servidor):
+    # Propósito: establecer una sesión SSH reutilizable.
+    # Por qué: centralizar conexión y manejo de errores para no repetir código.
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -81,6 +97,8 @@ def conectar_ssh(servidor):
         return None
 
 def ejecutar_comando_remoto(ssh, comando):
+    # Propósito: ejecutar un comando en el host remoto y normalizar la salida.
+    # Por qué: un punto único de lectura de stdout/stderr facilita detección de errores.
     try:
         stdin, stdout, stderr = ssh.exec_command(comando)
         salida = stdout.read().decode().strip()
@@ -94,20 +112,27 @@ def ejecutar_comando_remoto(ssh, comando):
 # ==============================================================================
 
 def servicio_instalado_remoto(ssh, nombre):
+    # Propósito: comprobar si una unidad systemd está registrada en el sistema remoto.
+    # Por qué: evita intentar checks sobre servicios que no están presentes.
     cmd = f"systemctl list-unit-files {nombre}"
     salida = ejecutar_comando_remoto(ssh, cmd)
     return nombre in salida and ("enabled" in salida or "disabled" in salida or "static" in salida)
 
 def detectar_servicios_instalados_remoto(ssh, lista_candidatos):
+    # Propósito: filtrar la lista de candidatos y devolver solo los instalados.
     return [svc for svc in lista_candidatos if servicio_instalado_remoto(ssh, svc)]
 
 def check_estado_servicio_remoto(ssh, nombre):
+    # Propósito: determinar si un servicio systemd está `active`.
+    # Por qué: el estado del servicio es la base para decidir `OK` o `CRIT`.
     salida = ejecutar_comando_remoto(ssh, f"systemctl is-active {nombre}")
     estado = salida.strip()
     activo = (estado == "active")
     return activo, "OK" if activo else "CRIT", f"Estado: {estado}"
 
 def check_puerto_escuchando_remoto(servidor_ip, puerto=80):
+    # Propósito: verificar a nivel de TCP si el puerto está aceptando conexiones.
+    # Por qué: un puerto abierto no garantiza servicio HTTP funcional, pero es un chequeo rápido.
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2)
@@ -118,6 +143,8 @@ def check_puerto_escuchando_remoto(servidor_ip, puerto=80):
         return False, "CRIT", f"Error: {e}"
 
 def check_respuesta_http_remoto(servidor_ip, timeout=10, max_time=3.0):
+    # Propósito: solicitar la URL principal y medir código HTTP y latencia.
+    # Por qué: comprueba funcionalidad de la aplicación web, no solo conectividad TCP.
     url = f"http://{servidor_ip}"
     try:
         start = datetime.datetime.now()
@@ -135,6 +162,9 @@ def check_respuesta_http_remoto(servidor_ip, timeout=10, max_time=3.0):
         return "CRIT", f"Error HTTP: {e}"
 
 def check_recursos_sistema_remoto(ssh):
+    # Propósito: obtener métricas de CPU/RAM/Disco desde el host remoto y compararlas
+    # con umbrales definidos.
+    # Por qué: recursos saturados suelen ser causa de degradación o fallos de servicio.
     try:
         cpu = float(ejecutar_comando_remoto(ssh, "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'") or 0)
         ram = float(ejecutar_comando_remoto(ssh, "free | grep Mem | awk '{print $3/$2 * 100.0}'") or 0)
@@ -150,6 +180,8 @@ def check_recursos_sistema_remoto(ssh):
         return "CRIT", f"Error recursos: {e}"
 
 def obtener_info_sistema_local():
+    # Propósito: obtener hostname e IP local (para incluir en informes).
+    # Por qué: facilita identificar el origen del informe cuando se revisan logs.
     hostname = platform.node()
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -160,6 +192,8 @@ def obtener_info_sistema_local():
     return hostname, ip
 
 def obtener_info_sistema_remoto(ssh):
+    # Propósito: recuperar hostname e IP del host remoto vía SSH.
+    # Por qué: metadatos útiles para el informe y diagnóstico remoto.
     hostname = ejecutar_comando_remoto(ssh, "hostname")
     ip = ejecutar_comando_remoto(ssh, "hostname -I | awk '{print $1}'")
     return hostname, ip
@@ -169,6 +203,8 @@ def obtener_info_sistema_remoto(ssh):
 # ==============================================================================
 
 def monitorizar_servidor(servidor, modo_auto=False, checks_selectivos=None):
+    # Propósito: orquestar todos los checks para un servidor y guardar el resultado.
+    # Por qué: centraliza la lógica de monitorización y determina el estado global.
     ssh = conectar_ssh(servidor)
     if not ssh:
         return {"estado_global": "CRIT", "checks": {"ssh": {"estado": "CRIT", "detalles": "Conexión SSH fallida"}}}
@@ -221,11 +257,14 @@ def monitorizar_servidor(servidor, modo_auto=False, checks_selectivos=None):
     return estado_global
 
 def crear_ruta_salida(fecha_hoy):
+    # Propósito: crear una carpeta organizada por fecha para guardar informes.
     ruta = os.path.join(BASE_DIR, fecha_hoy)
     os.makedirs(ruta, exist_ok=True)
     return ruta
 
 def guardar_resultado(resultado, modo_auto=False):
+    # Propósito: serializar y persistir el resultado del check en JSON y texto.
+    # Por qué: mantener histórico legible (log) y estructurado (JSON) para análisis.
     ahora = datetime.datetime.now()
     fecha_iso = ahora.isoformat()
     hostname_local, ip_local = obtener_info_sistema_local()
@@ -271,6 +310,7 @@ def guardar_resultado(resultado, modo_auto=False):
     with open(txt_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(lines))
 
+    # Por qué: se informa al operador de la ubicación de los ficheros generados.
     print(f"\n✅ Informe guardado en: {txt_path}")
     print(f"📊 JSON en: {json_path}\n")
 
@@ -279,6 +319,8 @@ def guardar_resultado(resultado, modo_auto=False):
 # ==============================================================================
 
 def menu_interactivo():
+    # Propósito: interfaz CLI básica para operaciones manuales y diagnósticos.
+    # Por qué: permite al operador ejecutar acciones y checks sin cron ni automatización.
     print("\n" + "="*60)
     print("🔧 MONITOR DE SERVICIOS CRÍTICOS")
     print("="*60)
@@ -437,6 +479,7 @@ def menu_interactivo():
 # ==============================================================================
 
 def main():
+    # Propósito: punto de entrada; soporta modo automático para cron o modo interactivo.
     parser = argparse.ArgumentParser(description="Monitor avanzado de servicios críticos")
     parser.add_argument('--auto', action='store_true', help="Modo automático para cron")
     args = parser.parse_args()
